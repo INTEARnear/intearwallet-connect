@@ -10,30 +10,30 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
  */
 function base58Encode(bytes) {
     if (bytes.length === 0) return '';
-    
+
     // Count leading zeros
     let leadingZeros = 0;
     while (leadingZeros < bytes.length && bytes[leadingZeros] === 0) {
         leadingZeros++;
     }
-    
+
     if (leadingZeros === bytes.length) {
         return '1'.repeat(leadingZeros);
     }
-    
+
     // Convert bytes to BigInt
     let num = BigInt(0);
     for (let i = leadingZeros; i < bytes.length; i++) {
         num = num * 256n + BigInt(bytes[i]);
     }
-    
+
     // Convert to base58
     let result = '';
     while (num > 0) {
         result = BASE58_ALPHABET[Number(num % 58n)] + result;
         num = num / 58n;
     }
-    
+
     // Add leading zeros (represented as '1' in base58)
     return '1'.repeat(leadingZeros) + result;
 }
@@ -98,8 +98,7 @@ class IntearWalletConnector {
      * @param {Object} options - Connection options
      * @param {string} [options.walletUrl='https://wallet.intear.tech'] - The wallet URL
      * @param {string} [options.networkId='mainnet'] - The network ID (mainnet, testnet, or custom for localnets)
-     * @returns {Promise<ConnectedAccount>} A promise that resolves with the connected account
-     * @throws {Error} If connection fails
+     * @returns {Promise<ConnectedAccount | null>} A promise that resolves with the connected account, or null if user has rejected the connection
      */
     async requestConnection(options = {}) {
         const {
@@ -138,7 +137,7 @@ class IntearWalletConnector {
             keyPair.privateKey,
             hashedMessage
         );
-        
+
         const signatureBytes = new Uint8Array(signatureBuffer);
         const signatureBase58 = base58Encode(signatureBytes);
         const signature = `ed25519:${signatureBase58}`;
@@ -200,13 +199,17 @@ class IntearWalletConnector {
                             await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
                             resolve(this.#connectedAccount);
                         } else {
-                            reject(new Error('No accounts returned from wallet'));
+                            reject(new Error('No accounts returned from wallet, this should never happen, a bug on wallet side'));
                         }
                     } else if (data.type === 'error' && !resultReceived) {
                         resultReceived = true;
                         cleanup();
                         popup.close();
-                        reject(new Error(data.message || 'Connection failed'));
+                        if (data.message == "User rejected the connection") {
+                            resolve(null);
+                        } else {
+                            reject(new Error(data.message || 'Connection failed'));
+                        }
                     }
                 } catch (error) {
                     // Ignore JSON parse errors from other messages
@@ -219,10 +222,10 @@ class IntearWalletConnector {
                 if (popup.closed && !resultReceived) {
                     cleanup();
                     if (!resultReceived) {
-                        reject(new Error('Popup was closed'));
+                        resolve(null)
                     }
                 }
-            }, 500);
+            }, 100);
         });
     }
 

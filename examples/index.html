@@ -53,6 +53,16 @@
       color: #155724;
     }
 
+    #status.rejected {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    #status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
     .button-group {
       display: flex;
       gap: 12px;
@@ -129,15 +139,18 @@
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
 
+    function setStatus(text, className) {
+      statusEl.textContent = text;
+      statusEl.className = className || '';
+    }
+
     function updateUI() {
       if (connector.connectedAccount) {
-        statusEl.textContent = `Connected: ${connector.connectedAccount.accountId}`;
-        statusEl.classList.add('connected');
+        setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
         connectBtn.disabled = true;
         disconnectBtn.disabled = false;
       } else {
-        statusEl.textContent = 'Not connected';
-        statusEl.classList.remove('connected');
+        setStatus('Not connected');
         connectBtn.disabled = false;
         disconnectBtn.disabled = true;
       }
@@ -149,10 +162,15 @@
         const result = await connector.requestConnection();
         console.log('result:', result);
         connectBtn.textContent = 'Connect Wallet';
-        updateUI();
+        
+        if (result === null) {
+          setStatus('Connection rejected by user', 'rejected');
+        } else {
+          updateUI();
+        }
       } catch (error) {
         console.error('Connection failed:', error);
-        alert('Failed to connect wallet');
+        setStatus(`Error: ${error.message}`, 'error');
         connectBtn.textContent = 'Connect Wallet';
       }
     });
