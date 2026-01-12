@@ -3,3 +3,4 @@ scripts/
 examples/
 .gitignore
 .git/
+node_modules/

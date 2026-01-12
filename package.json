@@ -2,13 +2,18 @@
     "name": "intearwallet-connect",
     "version": "1.0.0",
     "description": "A lightweight connector library for Intear Wallet integration",
+    "main": "build/index.js",
+    "types": "build/index.d.ts",
     "files": [
-        "dist"
+        "build"
     ],
     "scripts": {
-        "build": "node -e \"require('fs').writeFileSync('dist/index.js', require('fs').readFileSync('src/index.js'))\"",
+        "build": "tsc",
         "prepublishOnly": "npm run build",
-        "example": "npm run build && node -e \"require('fs').writeFileSync('examples/index.js', require('fs').readFileSync('dist/index.js'))\" && npx serve examples"
+        "example": "npm run build && node -e \"require('fs').writeFileSync('examples/index.js', require('fs').readFileSync('build/index.js'))\" && npx serve examples"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.3"
     },
     "keywords": [
         "intear",
