@@ -1,55 +1,68 @@
 /**
- * Base58 encoding/decoding utilities
- */
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-
-/**
- * Encodes a Uint8Array to base58 string
- * @param {Uint8Array} bytes - The bytes to encode
+ * Encodes a byte array to base58 string
+ * @param {Uint8Array | Iterable<number>} bytes - The bytes to encode
  * @returns {string} The base58 encoded string
  */
 function base58Encode(bytes) {
-    if (bytes.length === 0) return '';
+    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-    // Count leading zeros
-    let leadingZeros = 0;
-    while (leadingZeros < bytes.length && bytes[leadingZeros] === 0) {
-        leadingZeros++;
+    if (!(bytes instanceof Uint8Array)) {
+        bytes = Uint8Array.from(bytes);
     }
 
-    if (leadingZeros === bytes.length) {
-        return '1'.repeat(leadingZeros);
+    let zeroCount = 0;
+    while (zeroCount < bytes.length && bytes[zeroCount] === 0) {
+        zeroCount++;
     }
 
-    // Convert bytes to BigInt
-    let num = BigInt(0);
-    for (let i = leadingZeros; i < bytes.length; i++) {
-        num = num * 256n + BigInt(bytes[i]);
+    const digits = [];
+    for (let i = zeroCount; i < bytes.length; i++) {
+        let carry = bytes[i];
+        for (let j = 0; j < digits.length; j++) {
+            carry += digits[j] << 8;
+            digits[j] = carry % 58;
+            carry = (carry / 58) | 0;
+        }
+        while (carry > 0) {
+            digits.push(carry % 58);
+            carry = (carry / 58) | 0;
+        }
     }
 
-    // Convert to base58
-    let result = '';
-    while (num > 0) {
-        result = BASE58_ALPHABET[Number(num % 58n)] + result;
-        num = num / 58n;
+    let result = "";
+    for (let i = 0; i < zeroCount; i++) {
+        result += ALPHABET[0];
     }
 
-    // Add leading zeros (represented as '1' in base58)
-    return '1'.repeat(leadingZeros) + result;
+    for (let i = digits.length - 1; i >= 0; i--) {
+        result += ALPHABET[digits[i]];
+    }
+
+    return result;
 }
+
 
 /**
  * ConnectedAccount - A connected Intear Wallet account and its data
- * @class
  */
 class ConnectedAccount {
+    #connector;
+
     /**
-     * Creates a new ConnectedAccount instance
-     * @constructor
-     * @param {string} accountId - The account ID
+     * @hideconstructor
      */
-    constructor(accountId) {
+    constructor(accountId, connector) {
         this.accountId = accountId;
+        this.#connector = connector;
+        this.disconnected = false;
+    }
+
+    /**
+     * Disconnects the account from the connector
+     * @returns {void}
+     */
+    disconnect() {
+        this.#connector.disconnect();
     }
 }
 
@@ -57,7 +70,6 @@ const STORAGE_KEY_ACCOUNT_ID = 'accountId';
 
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
- * @class
  */
 class IntearWalletConnector {
     #connectedAccount;
@@ -73,10 +85,15 @@ class IntearWalletConnector {
             throw new Error('loadFrom: Invalid arguments');
         }
         const accountId = await storage.get(STORAGE_KEY_ACCOUNT_ID);
-        const connectedAccount = accountId ? new ConnectedAccount(accountId) : null;
-        return new IntearWalletConnector(storage, connectedAccount);
+        const connector = new IntearWalletConnector(storage, null);
+        const connectedAccount = accountId ? new ConnectedAccount(accountId, connector) : null;
+        connector.#connectedAccount = connectedAccount;
+        return connector;
     }
 
+    /**
+     * @hideconstructor
+     */
     constructor(storage, connectedAccount) {
         if (!storage) {
             throw new Error('constructor: Invalid arguments. Don\'t use this constructor directly, use loadFrom instead.');
@@ -99,8 +116,13 @@ class IntearWalletConnector {
      * @param {string} [options.walletUrl='https://wallet.intear.tech'] - The wallet URL
      * @param {string} [options.networkId='mainnet'] - The network ID (mainnet, testnet, or custom for localnets)
      * @returns {Promise<ConnectedAccount | null>} A promise that resolves with the connected account, or null if user has rejected the connection
+     * @throws {Error} If the failed to open the wallet popup or already connected
      */
     async requestConnection(options = {}) {
+        if (this.#connectedAccount !== null) {
+            throw new Error('Already connected');
+        }
+
         const {
             walletUrl = 'https://wallet.intear.tech',
             networkId = 'mainnet',
@@ -232,10 +254,16 @@ class IntearWalletConnector {
     /**
      * Disconnects from the Intear Wallet
      * @returns {Promise<void>}
+     * @throws {Error} If the account is not connected
      */
     async disconnect() {
-        this.#connectedAccount = null;
-        await this.storage.remove(STORAGE_KEY_ACCOUNT_ID);
+        if (this.#connectedAccount !== null) {
+            this.#connectedAccount.disconnected = true;
+            this.#connectedAccount = null;
+            await this.storage.remove(STORAGE_KEY_ACCOUNT_ID);
+        } else {
+            throw new Error('Account is not connected');
+        }
     }
 }
 
@@ -275,7 +303,7 @@ Storage.prototype.remove = function (key) {
 
 /**
  * InMemoryStorage - An in-memory storage implementation
- * @class
+ * @implements {Storage}
  */
 class InMemoryStorage {
     /**
@@ -306,7 +334,7 @@ class InMemoryStorage {
 
 /**
  * LocalStorageStorage - A localStorage-based storage implementation with prefix support
- * @class
+ * @implements {Storage}
  */
 class LocalStorageStorage {
     /**

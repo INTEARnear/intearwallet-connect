@@ -2,18 +2,13 @@
     "name": "intearwallet-connect",
     "version": "1.0.0",
     "description": "A lightweight connector library for Intear Wallet integration",
-    "main": "dist/index.js",
-    "module": "dist/index.esm.js",
-    "types": "dist/index.d.ts",
     "files": [
         "dist"
     ],
     "scripts": {
-        "build": "npm run build:cjs && npm run build:esm",
-        "build:cjs": "node -e \"require('fs').writeFileSync('dist/index.js', require('fs').readFileSync('src/index.js'))\"",
-        "build:esm": "node -e \"require('fs').writeFileSync('dist/index.esm.js', require('fs').readFileSync('src/index.js'))\"",
+        "build": "node -e \"require('fs').writeFileSync('dist/index.js', require('fs').readFileSync('src/index.js'))\"",
         "prepublishOnly": "npm run build",
-        "example": "npm run build:esm && node -e \"require('fs').writeFileSync('examples/index.esm.js', require('fs').readFileSync('dist/index.esm.js'))\" && npx serve examples"
+        "example": "npm run build && node -e \"require('fs').writeFileSync('examples/index.js', require('fs').readFileSync('dist/index.js'))\" && npx serve examples"
     },
     "keywords": [
         "intear",

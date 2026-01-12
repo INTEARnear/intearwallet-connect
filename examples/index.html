@@ -132,7 +132,7 @@
   </div>
 
   <script type="module">
-    import {IntearWalletConnector, LocalStorageStorage} from './index.esm.js';
+    import {IntearWalletConnector, LocalStorageStorage} from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
