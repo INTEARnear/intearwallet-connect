@@ -198,22 +198,18 @@ async function openNativeAppFlow(config) {
         ws.onmessage = async (event) => {
             try {
                 const data = JSON.parse(event.data);
-                // First message should contain the session ID
                 if (data.session_id && !resultReceived) {
                     const sessionId = data.session_id;
-                    // Send the request data over WebSocket
                     ws.send(JSON.stringify({
                         type: config.sendMessageType,
                         data: config.sendData
                     }));
                     const intearUrl = `intear://${config.method}?session_id=${encodeURIComponent(sessionId)}`;
-                    // Open the native app URL via hidden iframe (window.location.href doesn't work with custom protocols)
                     const iframe = document.createElement('iframe');
                     iframe.style.display = 'none';
                     iframe.src = intearUrl;
                     document.body.appendChild(iframe);
-                    // Clean up iframe after a short delay
-                    // setTimeout(() => iframe.remove(), 1000);
+                    setTimeout(() => iframe.remove(), 1000);
                 }
                 else if (data.type === config.successMessageType && !resultReceived) {
                     resultReceived = true;
@@ -603,19 +599,19 @@ export class InMemoryStorage {
         clone.data = new Map(this.data);
         return clone;
     }
-    get(key) {
+    async get(key) {
         const value = this.data.get(key);
-        return Promise.resolve(value !== undefined ? value : null);
+        return value !== undefined ? value : null;
     }
     async set(key, value) {
         const previousValue = await this.get(key);
         this.data.set(key, value);
-        return Promise.resolve(previousValue);
+        return previousValue;
     }
     async remove(key) {
         const previousValue = await this.get(key);
         this.data.delete(key);
-        return Promise.resolve(previousValue);
+        return previousValue;
     }
 }
 /**
@@ -641,22 +637,22 @@ export class LocalStorageStorage {
     _getPrefixedKey(key) {
         return this.prefix + key;
     }
-    get(key) {
+    async get(key) {
         const prefixedKey = this._getPrefixedKey(key);
         const item = this.storage.getItem(prefixedKey);
-        return Promise.resolve(item === null ? null : JSON.parse(item));
+        return item === null ? null : JSON.parse(item);
     }
     async set(key, value) {
         const previousValue = await this.get(key);
         const prefixedKey = this._getPrefixedKey(key);
         this.storage.setItem(prefixedKey, JSON.stringify(value));
-        return Promise.resolve(previousValue);
+        return previousValue;
     }
     async remove(key) {
         const previousValue = await this.get(key);
         const prefixedKey = this._getPrefixedKey(key);
         this.storage.removeItem(prefixedKey);
-        return Promise.resolve(previousValue);
+        return previousValue;
     }
 }
 export default IntearWalletConnector;
