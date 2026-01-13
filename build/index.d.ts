@@ -25,6 +25,55 @@ export interface Storage {
     remove(key: string): Promise<any | null>;
 }
 /**
+ * NEP-413 message payload for signing
+ */
+export interface Nep413Payload {
+    /**
+     * The message to sign, usually a human-readable string that is displayed in the wallet,
+     * or sometimes a JSON representation of Near Intents, that has a special handling for
+     * displaying intents in the wallet.
+     */
+    message: string;
+    /**
+     * The nonce of the message, 32 bytes
+     */
+    nonce: Uint8Array;
+    /**
+     * The recipient of the message, usually account ID of a smart contract or a web app domain
+     */
+    recipient: string;
+    /**
+     * Ignored by the wallet, but required by NEP-413
+     */
+    callbackUrl?: string | null;
+    /**
+     * State that will be returned in the signed message payload. Useless (you can just
+     * create a variable and use it after `await`ing the promise), but required by NEP-413
+     */
+    state?: string | null;
+}
+/**
+ * Signed message response from the wallet, as per NEP-413
+ */
+export interface SignedMessage {
+    /**
+     * The account ID that signed the message. Guaranteed to be the same as the connected account
+     */
+    accountId: string;
+    /**
+     * The public key that was used to sign the message.
+     */
+    publicKey: string;
+    /**
+     * Base64 encoded signature of the message.
+     */
+    signature: string;
+    /**
+     * Same as in Nep413Payload.state
+     */
+    state?: string | null;
+}
+/**
  * ConnectedAccount - A connected Intear Wallet account and its data
  */
 declare class ConnectedAccount {
@@ -39,19 +88,20 @@ declare class ConnectedAccount {
      * Disconnects the account from the connector
      */
     disconnect(): void;
-}
-/**
- * Connection options for requestConnection
- */
-export interface ConnectionOptions {
-    walletUrl?: string;
-    networkId?: string;
+    /**
+     * Signs a message using NEP-413 standard via wallet popup
+     * @param messageToSign - The NEP-413 message payload to sign
+     * @returns A promise that resolves with the signed message, or null if user rejected
+     * @throws Error if not connected, nonce is not 32 bytes, or signing fails
+     */
+    signMessage(messageToSign: Nep413Payload): Promise<SignedMessage | null>;
 }
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
  */
 export declare class IntearWalletConnector {
     #private;
+    walletUrl: string | null;
     storage: Storage;
     /**
      * Creates a new IntearWalletConnector instance
@@ -67,11 +117,12 @@ export declare class IntearWalletConnector {
     get connectedAccount(): ConnectedAccount | null;
     /**
      * Requests a connection to the Intear Wallet
-     * @param options - Connection options
+     * @param networkId - The network ID to connect to
+     * @param walletUrl - The URL of the wallet to connect to
      * @returns A promise that resolves with the connected account, or null if user has rejected the connection
      * @throws Error If the failed to open the wallet popup or already connected
      */
-    requestConnection(options?: ConnectionOptions): Promise<ConnectedAccount | null>;
+    requestConnection(networkId?: string, walletUrl?: string): Promise<ConnectedAccount | null>;
     /**
      * Disconnects from the Intear Wallet
      * @throws Error If the account is not connected

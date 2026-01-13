@@ -103,9 +103,46 @@
       box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
     }
 
+    #signMessageBtn {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      color: white;
+    }
+
+    #signMessageBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(17, 153, 142, 0.4);
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .signature-result {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      word-break: break-all;
+      display: none;
+    }
+
+    .signature-result.visible {
+      display: block;
+    }
+
+    .signature-result h4 {
+      margin-bottom: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .signature-result p {
+      margin-bottom: 4px;
+      color: #555;
     }
 
     .info {
@@ -124,7 +161,14 @@
     <div id="status">Not connected</div>
     <div class="button-group">
       <button id="connectBtn">Connect Wallet</button>
+      <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+    <div id="signatureResult" class="signature-result">
+      <h4>Signed Message Result:</h4>
+      <p><strong>Account:</strong> <span id="sigAccountId"></span></p>
+      <p><strong>Public Key:</strong> <span id="sigPublicKey"></span></p>
+      <p><strong>Signature:</strong> <span id="sigSignature"></span></p>
     </div>
     <div class="info">
       This is a demo of the intearwallet-connect library
@@ -137,7 +181,12 @@
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
+    const signMessageBtn = document.getElementById('signMessageBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
+    const signatureResult = document.getElementById('signatureResult');
+    const sigAccountId = document.getElementById('sigAccountId');
+    const sigPublicKey = document.getElementById('sigPublicKey');
+    const sigSignature = document.getElementById('sigSignature');
 
     function setStatus(text, className) {
       statusEl.textContent = text;
@@ -148,11 +197,14 @@
       if (connector.connectedAccount) {
         setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
         connectBtn.disabled = true;
+        signMessageBtn.disabled = false;
         disconnectBtn.disabled = false;
       } else {
         setStatus('Not connected');
         connectBtn.disabled = false;
+        signMessageBtn.disabled = true;
         disconnectBtn.disabled = true;
+        signatureResult.classList.remove('visible');
       }
     }
 
@@ -172,6 +224,40 @@
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         connectBtn.textContent = 'Connect Wallet';
+      }
+    });
+
+    signMessageBtn.addEventListener('click', async () => {
+      try {
+        signMessageBtn.textContent = 'Signing...';
+        
+        // Generate a random 32-byte nonce
+        const nonceBytes = new Uint8Array(32);
+        crypto.getRandomValues(nonceBytes);
+        
+        const result = await connector.connectedAccount.signMessage({
+          message: 'Hello from Intear Wallet Connect Example!',
+          nonce: nonceBytes,
+          recipient: 'intearwallet-connect-example',
+          callbackUrl: null,
+          state: null
+        });
+        
+        signMessageBtn.textContent = 'Sign Message';
+        
+        if (result === null) {
+          setStatus('Signing rejected by user', 'rejected');
+        } else {
+          setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
+          sigAccountId.textContent = result.accountId;
+          sigPublicKey.textContent = result.publicKey;
+          sigSignature.textContent = result.signature;
+          signatureResult.classList.add('visible');
+        }
+      } catch (error) {
+        console.error('Signing failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        signMessageBtn.textContent = 'Sign Message';
       }
     });
 

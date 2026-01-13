@@ -1,4 +1,23 @@
 /**
+ * Decodes a base64url string to byte array
+ * @param str - The base64 or base64url encoded string
+ * @returns The decoded byte array
+ */
+function base64Decode(str: string): Uint8Array {
+    const binaryString = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(binaryString, char => char.charCodeAt(0));
+}
+
+/**
+ * Encodes a byte array to base64 string
+ * @param bytes - The byte array to encode
+ * @returns The base64 encoded string
+ */
+function base64Encode(bytes: Uint8Array): string {
+    return btoa(String.fromCharCode(...bytes));
+}
+
+/**
  * Encodes a byte array to base58 string
  * @param bytes - The byte array to encode
  * @returns The base58 encoded string
@@ -45,6 +64,154 @@ function base58Encode(bytes: Uint8Array | Iterable<number>): string {
 }
 
 /**
+ * Decodes a base58 string to byte array
+ * @param str - The base58 encoded string
+ * @returns The decoded byte array
+ */
+function base58Decode(str: string): Uint8Array {
+    const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const ALPHABET_MAP: { [key: string]: number } = {};
+    for (let i = 0; i < ALPHABET.length; i++) {
+        ALPHABET_MAP[ALPHABET[i]] = i;
+    }
+
+    let zeroCount = 0;
+    while (zeroCount < str.length && str[zeroCount] === ALPHABET[0]) {
+        zeroCount++;
+    }
+
+    const bytes: number[] = [];
+    for (let i = zeroCount; i < str.length; i++) {
+        const char = str[i];
+        if (!(char in ALPHABET_MAP)) {
+            throw new Error(`Invalid base58 character: ${char}`);
+        }
+        let carry = ALPHABET_MAP[char];
+        for (let j = 0; j < bytes.length; j++) {
+            carry += bytes[j] * 58;
+            bytes[j] = carry & 0xff;
+            carry >>= 8;
+        }
+        while (carry > 0) {
+            bytes.push(carry & 0xff);
+            carry >>= 8;
+        }
+    }
+
+    const result = new Uint8Array(zeroCount + bytes.length);
+    for (let i = 0; i < zeroCount; i++) {
+        result[i] = 0;
+    }
+    for (let i = 0; i < bytes.length; i++) {
+        result[zeroCount + bytes.length - 1 - i] = bytes[i];
+    }
+
+    return result;
+}
+
+/**
+ * Configuration for popup flow
+ */
+interface PopupFlowConfig<TResponse> {
+    /** URL path to open in the popup (appended to walletUrl) */
+    path: string;
+    /** Wallet base URL */
+    walletUrl: string;
+    /** Popup window name */
+    windowName: string;
+    /** Message type to send when popup is ready */
+    sendMessageType: string;
+    /** Data to send to the popup */
+    sendData: any;
+    /** Message type indicating success */
+    successMessageType: string;
+    /** Transform successful response data (can be async) */
+    onSuccess: (data: any) => TResponse | Promise<TResponse>;
+    /** Optional: handle user rejection errors, return value to resolve with */
+    isUserRejection?: (errorMessage: string) => boolean;
+}
+
+/**
+ * Opens a popup and handles the message flow with the wallet
+ * @param config - Configuration for the popup flow
+ * @returns A promise that resolves with the response, or null if user rejected/closed
+ * @throws Error if popup fails to open or wallet returns an error
+ */
+async function openPopupFlow<TResponse>(config: PopupFlowConfig<TResponse>): Promise<TResponse | null> {
+    const popup = window.open(
+        `${config.walletUrl}${config.path}`,
+        config.windowName,
+        'width=400,height=700,scrollbars=yes,resizable=yes'
+    );
+
+    if (!popup) {
+        throw new Error('Failed to open wallet popup.');
+    }
+
+    return new Promise<TResponse | null>((resolve, reject) => {
+        let resultReceived = false;
+
+        const cleanup = () => {
+            window.removeEventListener('message', messageHandler);
+            if (checkClosed) {
+                clearInterval(checkClosed);
+            }
+        };
+
+        const messageHandler = async (event: MessageEvent) => {
+            if (event.origin !== config.walletUrl) {
+                return;
+            }
+
+            try {
+                const data = event.data;
+
+                if (data.type === 'ready') {
+                    popup.postMessage(
+                        {
+                            type: config.sendMessageType,
+                            data: config.sendData
+                        },
+                        config.walletUrl
+                    );
+                } else if (data.type === config.successMessageType && !resultReceived) {
+                    resultReceived = true;
+                    cleanup();
+                    popup.close();
+                    try {
+                        resolve(await config.onSuccess(data));
+                    } catch (err) {
+                        reject(err);
+                    }
+                } else if (data.type === 'error' && !resultReceived) {
+                    resultReceived = true;
+                    cleanup();
+                    popup.close();
+                    if (config.isUserRejection?.(data.message)) {
+                        resolve(null);
+                    } else {
+                        reject(new Error(data.message || 'Operation failed'));
+                    }
+                }
+            } catch (error) {
+                // Ignore JSON parse errors from other messages
+            }
+        };
+
+        window.addEventListener('message', messageHandler);
+
+        const checkClosed = setInterval(() => {
+            if (popup.closed && !resultReceived) {
+                cleanup();
+                if (!resultReceived) {
+                    resolve(null);
+                }
+            }
+        }, 100);
+    });
+}
+
+/**
  * Storage - A storage interface that is used by the connector to store its internal data
  */
 export interface Storage {
@@ -72,6 +239,57 @@ export interface Storage {
 }
 
 /**
+ * NEP-413 message payload for signing
+ */
+export interface Nep413Payload {
+    /**
+     * The message to sign, usually a human-readable string that is displayed in the wallet,
+     * or sometimes a JSON representation of Near Intents, that has a special handling for
+     * displaying intents in the wallet.
+     */
+    message: string;
+    /**
+     * The nonce of the message, 32 bytes
+     */
+    nonce: Uint8Array;
+    /**
+     * The recipient of the message, usually account ID of a smart contract or a web app domain
+     */
+    recipient: string;
+    /**
+     * Ignored by the wallet, but required by NEP-413
+     */
+    callbackUrl?: string | null;
+    /**
+     * State that will be returned in the signed message payload. Useless (you can just
+     * create a variable and use it after `await`ing the promise), but required by NEP-413
+     */
+    state?: string | null;
+}
+
+/**
+ * Signed message response from the wallet, as per NEP-413
+ */
+export interface SignedMessage {
+    /**
+     * The account ID that signed the message. Guaranteed to be the same as the connected account
+     */
+    accountId: string;
+    /**
+     * The public key that was used to sign the message.
+     */
+    publicKey: string;
+    /**
+     * Base64 encoded signature of the message.
+     */
+    signature: string;
+    /**
+     * Same as in Nep413Payload.state
+     */
+    state?: string | null;
+}
+
+/**
  * ConnectedAccount - A connected Intear Wallet account and its data
  */
 class ConnectedAccount {
@@ -94,23 +312,106 @@ class ConnectedAccount {
     disconnect(): void {
         this.#connector.disconnect();
     }
+
+    /**
+     * Signs a message using NEP-413 standard via wallet popup
+     * @param messageToSign - The NEP-413 message payload to sign
+     * @returns A promise that resolves with the signed message, or null if user rejected
+     * @throws Error if not connected, nonce is not 32 bytes, or signing fails
+     */
+    async signMessage(messageToSign: Nep413Payload): Promise<SignedMessage | null> {
+        if (this.disconnected) {
+            throw new Error('Account is disconnected');
+        }
+        if (messageToSign.nonce.length !== 32) {
+            throw new Error('Nonce must be 32 bytes');
+        }
+
+        if (!this.#connector.walletUrl) {
+            throw new Error('Wallet URL not available');
+        }
+
+        const privateKeyJwk = await this.#connector.storage.get(STORAGE_KEY_APP_PRIVATE_KEY);
+        if (!privateKeyJwk) {
+            throw new Error('Private key not found in storage');
+        }
+
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            privateKeyJwk,
+            { name: 'Ed25519' },
+            true,
+            ['sign']
+        );
+        const publicKeyBytes = base64Decode(privateKeyJwk.x);
+        const publicKeyBase58 = base58Encode(publicKeyBytes);
+        const publicKey = `ed25519:${publicKeyBase58}`;
+
+        const nep413Payload = JSON.stringify({
+            message: messageToSign.message,
+            nonce: Array.from(messageToSign.nonce),
+            recipient: messageToSign.recipient,
+            callback_url: messageToSign.callbackUrl ?? null,
+            state: messageToSign.state ?? null
+        });
+
+        const nonce = Date.now();
+        const messageToHash = `${nonce}|${nep413Payload}`;
+        const hashedMessage = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(messageToHash));
+
+        const signatureBuffer = await crypto.subtle.sign(
+            { name: 'Ed25519' },
+            privateKey,
+            hashedMessage
+        );
+
+        const signatureBytes = new Uint8Array(signatureBuffer);
+        const signatureBase58 = base58Encode(signatureBytes);
+        const signature = `ed25519:${signatureBase58}`;
+
+        const signMessageData = {
+            message: nep413Payload,
+            accountId: this.accountId,
+            publicKey,
+            nonce,
+            signature
+        };
+
+        const walletUrl = this.#connector.walletUrl;
+
+        return openPopupFlow<SignedMessage>({
+            path: '/sign-message',
+            walletUrl,
+            windowName: 'IntearWalletSignMessage',
+            sendMessageType: 'signMessage',
+            sendData: signMessageData,
+            successMessageType: 'signed',
+            onSuccess: (data) => {
+                const signatureWithoutPrefix = data.signature.signature.split(':')[1];
+                const signatureBytes = base58Decode(signatureWithoutPrefix);
+                const signatureBase64 = base64Encode(signatureBytes);
+                return {
+                    accountId: data.signature.accountId,
+                    publicKey: data.signature.publicKey,
+                    signature: signatureBase64,
+                    state: data.signature.state
+                };
+            },
+            isUserRejection: (msg) => msg === "User rejected the signature"
+        });
+    }
 }
 
 const STORAGE_KEY_ACCOUNT_ID = 'accountId';
-
-/**
- * Connection options for requestConnection
- */
-export interface ConnectionOptions {
-    walletUrl?: string;
-    networkId?: string;
-}
+const STORAGE_KEY_APP_PRIVATE_KEY = 'appPrivateKey';
+const STORAGE_KEY_WALLET_URL = 'walletUrl';
 
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
  */
 export class IntearWalletConnector {
     #connectedAccount: ConnectedAccount | null;
+    walletUrl: string | null;
     storage: Storage;
 
     /**
@@ -123,15 +424,17 @@ export class IntearWalletConnector {
             throw new Error('loadFrom: Invalid arguments');
         }
         const accountId = await storage.get(STORAGE_KEY_ACCOUNT_ID);
-        const connector = new IntearWalletConnector(storage, null);
+        const walletUrl = await storage.get(STORAGE_KEY_WALLET_URL);
+        const connector = new IntearWalletConnector(storage, null, walletUrl);
         const connectedAccount = accountId ? new ConnectedAccount(accountId, connector) : null;
         connector.#connectedAccount = connectedAccount;
         return connector;
     }
 
-    private constructor(storage: Storage, connectedAccount: ConnectedAccount | null) {
+    private constructor(storage: Storage, connectedAccount: ConnectedAccount | null, walletUrl: string | null) {
         this.storage = storage;
         this.#connectedAccount = connectedAccount;
+        this.walletUrl = walletUrl;
     }
 
     /**
@@ -144,19 +447,15 @@ export class IntearWalletConnector {
 
     /**
      * Requests a connection to the Intear Wallet
-     * @param options - Connection options
+     * @param networkId - The network ID to connect to
+     * @param walletUrl - The URL of the wallet to connect to
      * @returns A promise that resolves with the connected account, or null if user has rejected the connection
      * @throws Error If the failed to open the wallet popup or already connected
      */
-    async requestConnection(options: ConnectionOptions = {}): Promise<ConnectedAccount | null> {
+    async requestConnection(networkId: string = 'mainnet', walletUrl: string = 'https://wallet.intear.tech'): Promise<ConnectedAccount | null> {
         if (this.#connectedAccount !== null) {
             throw new Error('Already connected');
         }
-
-        const {
-            walletUrl = 'https://wallet.intear.tech',
-            networkId = 'mainnet',
-        } = options;
 
         const keyPair = await crypto.subtle.generateKey(
             {
@@ -201,80 +500,28 @@ export class IntearWalletConnector {
             actualOrigin: origin
         };
 
-        const popup = window.open(
-            `${walletUrl}/connect`,
-            'IntearWalletConnect',
-            'width=400,height=700,scrollbars=yes,resizable=yes'
-        );
-
-        if (!popup) {
-            throw new Error('Failed to open wallet popup.');
-        }
-
-        return new Promise<ConnectedAccount | null>((resolve, reject) => {
-            let resultReceived = false;
-
-            const cleanup = () => {
-                window.removeEventListener('message', messageHandler);
-                if (checkClosed) {
-                    clearInterval(checkClosed);
+        return openPopupFlow<ConnectedAccount>({
+            path: '/connect',
+            walletUrl,
+            windowName: 'IntearWalletConnect',
+            sendMessageType: 'signIn',
+            sendData: signInData,
+            successMessageType: 'connected',
+            onSuccess: async (data) => {
+                if (!data.accounts || data.accounts.length === 0) {
+                    throw new Error('No accounts returned from wallet, this should never happen, a bug on wallet side');
                 }
-            };
-
-            const messageHandler = async (event: MessageEvent) => {
-                if (event.origin !== walletUrl) {
-                    return;
-                }
-
-                try {
-                    const data = event.data;
-
-                    if (data.type === 'ready') {
-                        popup.postMessage(
-                            {
-                                type: 'signIn',
-                                data: signInData
-                            },
-                            walletUrl
-                        );
-                    } else if (data.type === 'connected' && !resultReceived) {
-                        resultReceived = true;
-                        cleanup();
-                        popup.close();
-
-                        if (data.accounts && data.accounts.length > 0) {
-                            const accountId = data.accounts[0].accountId;
-                            this.#connectedAccount = new ConnectedAccount(accountId, this);
-                            await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
-                            resolve(this.#connectedAccount);
-                        } else {
-                            reject(new Error('No accounts returned from wallet, this should never happen, a bug on wallet side'));
-                        }
-                    } else if (data.type === 'error' && !resultReceived) {
-                        resultReceived = true;
-                        cleanup();
-                        popup.close();
-                        if (data.message == "User rejected the connection") {
-                            resolve(null);
-                        } else {
-                            reject(new Error(data.message || 'Connection failed'));
-                        }
-                    }
-                } catch (error) {
-                    // Ignore JSON parse errors from other messages
-                }
-            };
-
-            window.addEventListener('message', messageHandler);
-
-            const checkClosed = setInterval(() => {
-                if (popup.closed && !resultReceived) {
-                    cleanup();
-                    if (!resultReceived) {
-                        resolve(null)
-                    }
-                }
-            }, 100);
+                const accountId = data.accounts[0].accountId;
+                this.#connectedAccount = new ConnectedAccount(accountId, this);
+                const responseWalletUrl = data.walletUrl || walletUrl;
+                this.walletUrl = responseWalletUrl;
+                const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
+                await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
+                await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
+                return this.#connectedAccount;
+            },
+            isUserRejection: (msg) => msg === "User rejected the connection"
         });
     }
 
@@ -286,7 +533,10 @@ export class IntearWalletConnector {
         if (this.#connectedAccount !== null) {
             this.#connectedAccount.disconnected = true;
             this.#connectedAccount = null;
+            this.walletUrl = null;
             await this.storage.remove(STORAGE_KEY_ACCOUNT_ID);
+            await this.storage.remove(STORAGE_KEY_APP_PRIVATE_KEY);
+            await this.storage.remove(STORAGE_KEY_WALLET_URL);
         } else {
             throw new Error('Account is not connected');
         }
