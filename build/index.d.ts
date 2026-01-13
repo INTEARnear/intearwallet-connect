@@ -74,6 +74,17 @@ export interface SignedMessage {
     state?: string | null;
 }
 /**
+ * Result of sending transactions to the wallet.
+ * Contains the execution outcomes for each transaction.
+ */
+export interface SendTransactionsResult {
+    /**
+     * Array of execution outcomes for each transaction, in the same order as the transactions were sent.
+     * Each outcome is the FinalExecutionOutcomeViewEnum as returned by NEAR RPC.
+     */
+    outcomes: object[];
+}
+/**
  * Options for requesting a connection to the Intear Wallet
  */
 export interface ConnectionOptions {
@@ -125,6 +136,13 @@ declare class ConnectedAccount {
      * @throws Error if not connected, nonce is not 32 bytes, or signing fails
      */
     signMessage(messageToSign: Nep413Payload): Promise<SignedMessage | null>;
+    /**
+     * Sends transactions to be signed and executed via wallet popup
+     * @param transactions - Array of transactions to send. Each transaction specifies signerId, receiverId, and actions.
+     * @returns A promise that resolves with the execution outcomes, or null if user rejected
+     * @throws Error if not connected or sending fails
+     */
+    sendTransactions(transactions: Transaction[]): Promise<SendTransactionsResult | null>;
 }
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
@@ -205,3 +223,84 @@ export declare class LocalStorageStorage implements Storage {
     remove(key: string): Promise<any | null>;
 }
 export default IntearWalletConnector;
+export interface CreateAccountAction {
+    type: "CreateAccount";
+}
+export interface DeployContractAction {
+    type: "DeployContract";
+    params: {
+        code: number[];
+    };
+}
+export interface FunctionCallAction {
+    type: "FunctionCall";
+    params: {
+        methodName: string;
+        args: object;
+        gas: string;
+        deposit: string;
+    };
+}
+export interface TransferAction {
+    type: "Transfer";
+    params: {
+        deposit: string;
+    };
+}
+export interface StakeAction {
+    type: "Stake";
+    params: {
+        stake: string;
+        publicKey: string;
+    };
+}
+export type AddKeyPermission = "FullAccess" | {
+    receiverId: string;
+    allowance?: string;
+    methodNames?: Array<string>;
+};
+export interface AddKeyAction {
+    type: "AddKey";
+    params: {
+        publicKey: string;
+        accessKey: {
+            nonce?: number;
+            permission: AddKeyPermission;
+        };
+    };
+}
+export interface DeleteKeyAction {
+    type: "DeleteKey";
+    params: {
+        publicKey: string;
+    };
+}
+export interface DeleteAccountAction {
+    type: "DeleteAccount";
+    params: {
+        beneficiaryId: string;
+    };
+}
+export interface UseGlobalContractAction {
+    type: "UseGlobalContract";
+    params: {
+        contractIdentifier: {
+            accountId: string;
+        } | {
+            codeHash: string;
+        };
+    };
+}
+export interface DeployGlobalContractAction {
+    type: "DeployGlobalContract";
+    params: {
+        code: number[];
+        deployMode: "CodeHash" | "AccountId";
+    };
+}
+export type Action = CreateAccountAction | DeployContractAction | FunctionCallAction | TransferAction | StakeAction | AddKeyAction | DeleteKeyAction | DeleteAccountAction | UseGlobalContractAction | DeployGlobalContractAction;
+export interface Transaction {
+    signerId: string;
+    receiverId: string;
+    actions: Array<Action>;
+}

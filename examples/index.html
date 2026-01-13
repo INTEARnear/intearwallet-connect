@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -123,6 +124,16 @@
       box-shadow: 0 4px 12px rgba(17, 153, 142, 0.4);
     }
 
+    #sendTxBtn {
+      background: linear-gradient(135deg, #f7971e 0%, #ffd200 100%);
+      color: white;
+    }
+
+    #sendTxBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(247, 151, 30, 0.4);
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -155,6 +166,37 @@
       color: #555;
     }
 
+    .tx-result {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .tx-result.visible {
+      display: block;
+    }
+
+    .tx-result h4 {
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .tx-result pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11px;
+      max-height: 300px;
+      overflow: auto;
+      white-space: pre;
+      margin: 0;
+    }
+
     .info {
       margin-top: 24px;
       padding-top: 24px;
@@ -165,6 +207,7 @@
     }
   </style>
 </head>
+
 <body>
   <div id="app">
     <h1>🔗 Intear Wallet Connector</h1>
@@ -173,6 +216,7 @@
       <button id="connectBtn">Connect</button>
       <button id="connectSignBtn">Connect + Sign</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
+      <button id="sendTxBtn" disabled>Send Transaction</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
     <div id="signatureResult" class="signature-result">
@@ -181,24 +225,31 @@
       <p><strong>Public Key:</strong> <span id="sigPublicKey"></span></p>
       <p><strong>Signature:</strong> <span id="sigSignature"></span></p>
     </div>
+    <div id="txResult" class="tx-result">
+      <h4>Transaction Result:</h4>
+      <pre id="txOutcomes"></pre>
+    </div>
     <div class="info">
       This is a demo of the intearwallet-connect library
     </div>
   </div>
 
   <script type="module">
-    import {IntearWalletConnector, LocalStorageStorage} from './index.js';
+    import { IntearWalletConnector, LocalStorageStorage } from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
     const connectSignBtn = document.getElementById('connectSignBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
+    const sendTxBtn = document.getElementById('sendTxBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const signatureResult = document.getElementById('signatureResult');
     const sigAccountId = document.getElementById('sigAccountId');
     const sigPublicKey = document.getElementById('sigPublicKey');
     const sigSignature = document.getElementById('sigSignature');
+    const txResult = document.getElementById('txResult');
+    const txOutcomes = document.getElementById('txOutcomes');
 
     function setStatus(text, className) {
       statusEl.textContent = text;
@@ -211,14 +262,17 @@
         connectBtn.disabled = true;
         connectSignBtn.disabled = true;
         signMessageBtn.disabled = false;
+        sendTxBtn.disabled = false;
         disconnectBtn.disabled = false;
       } else {
         setStatus('Not connected');
         connectBtn.disabled = false;
         connectSignBtn.disabled = false;
         signMessageBtn.disabled = true;
+        sendTxBtn.disabled = true;
         disconnectBtn.disabled = true;
         signatureResult.classList.remove('visible');
+        txResult.classList.remove('visible');
       }
     }
 
@@ -228,7 +282,7 @@
         const result = await connector.requestConnection();
         console.log('result:', result);
         connectBtn.textContent = 'Connect';
-        
+
         if (result === null) {
           setStatus('Connection rejected by user', 'rejected');
         } else {
@@ -244,11 +298,11 @@
     connectSignBtn.addEventListener('click', async () => {
       try {
         connectSignBtn.textContent = 'Connecting...';
-        
+
         // Generate a random 32-byte nonce
         const nonceBytes = new Uint8Array(32);
         crypto.getRandomValues(nonceBytes);
-        
+
         const result = await connector.requestConnection({
           messageToSign: {
             message: 'Sign in to Intear Wallet Connect Example',
@@ -260,7 +314,7 @@
         });
         console.log('result:', result);
         connectSignBtn.textContent = 'Connect + Sign';
-        
+
         if (result === null) {
           setStatus('Connection rejected by user', 'rejected');
         } else {
@@ -283,11 +337,11 @@
     signMessageBtn.addEventListener('click', async () => {
       try {
         signMessageBtn.textContent = 'Signing...';
-        
+
         // Generate a random 32-byte nonce
         const nonceBytes = new Uint8Array(32);
         crypto.getRandomValues(nonceBytes);
-        
+
         const result = await connector.connectedAccount.signMessage({
           message: 'Hello from Intear Wallet Connect Example!',
           nonce: nonceBytes,
@@ -295,9 +349,9 @@
           callbackUrl: null,
           state: null
         });
-        
+
         signMessageBtn.textContent = 'Sign Message';
-        
+
         if (result === null) {
           setStatus('Signing rejected by user', 'rejected');
         } else {
@@ -314,6 +368,43 @@
       }
     });
 
+    sendTxBtn.addEventListener('click', async () => {
+      try {
+        sendTxBtn.textContent = 'Sending...';
+
+        const accountId = connector.connectedAccount.accountId;
+        const result = await connector.connectedAccount.sendTransactions([
+          {
+            signerId: accountId,
+            receiverId: 'intear.near',
+            actions: [
+              {
+                type: 'Transfer',
+                params: {
+                  deposit: '1' + '0'.repeat(24 - 2) // 0.01 NEAR
+                }
+              }
+            ]
+          }
+        ]);
+
+        sendTxBtn.textContent = 'Send Transaction';
+
+        if (result === null) {
+          setStatus('Transaction rejected by user', 'rejected');
+          txResult.classList.remove('visible');
+        } else {
+          setStatus(`Transaction sent! Outcomes: ${result.outcomes.length}`, 'connected');
+          txOutcomes.textContent = JSON.stringify(result.outcomes, null, 2);
+          txResult.classList.add('visible');
+        }
+      } catch (error) {
+        console.error('Transaction failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        sendTxBtn.textContent = 'Send Transaction';
+      }
+    });
+
     disconnectBtn.addEventListener('click', () => {
       connector.disconnect();
       updateUI();
@@ -322,5 +413,5 @@
     updateUI();
   </script>
 </body>
-</html>
 
+</html>

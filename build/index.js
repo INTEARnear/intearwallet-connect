@@ -252,6 +252,62 @@ class ConnectedAccount {
             isUserRejection: (msg) => msg === "User rejected the signature"
         });
     }
+    /**
+     * Sends transactions to be signed and executed via wallet popup
+     * @param transactions - Array of transactions to send. Each transaction specifies signerId, receiverId, and actions.
+     * @returns A promise that resolves with the execution outcomes, or null if user rejected
+     * @throws Error if not connected or sending fails
+     */
+    async sendTransactions(transactions) {
+        if (this.disconnected) {
+            throw new Error('Account is disconnected');
+        }
+        if (!this.#connector.walletUrl) {
+            throw new Error('Wallet URL not available');
+        }
+        const privateKeyJwk = await this.#connector.storage.get(STORAGE_KEY_APP_PRIVATE_KEY);
+        if (!privateKeyJwk) {
+            throw new Error('Private key not found in storage');
+        }
+        const privateKey = await crypto.subtle.importKey('jwk', privateKeyJwk, { name: 'Ed25519' }, true, ['sign']);
+        const publicKeyBytes = base64Decode(privateKeyJwk.x);
+        const publicKeyBase58 = base58Encode(publicKeyBytes);
+        const publicKey = `ed25519:${publicKeyBase58}`;
+        const serializableTransactions = transactions.map(tx => ({
+            signerId: tx.signerId,
+            receiverId: tx.receiverId,
+            actions: tx.actions,
+        }));
+        const transactionsJson = JSON.stringify(serializableTransactions);
+        const nonce = Date.now();
+        const messageToHash = `${nonce}|${transactionsJson}`;
+        const hashedMessage = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(messageToHash));
+        const signatureBuffer = await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, hashedMessage);
+        const signatureBytes = new Uint8Array(signatureBuffer);
+        const signatureBase58 = base58Encode(signatureBytes);
+        const signature = `ed25519:${signatureBase58}`;
+        const sendTransactionsData = {
+            accountId: this.accountId,
+            publicKey,
+            nonce,
+            signature,
+            transactions: transactionsJson
+        };
+        const walletUrl = this.#connector.walletUrl;
+        return openPopupFlow({
+            path: '/send-transactions',
+            walletUrl,
+            sendMessageType: 'signAndSendTransactions',
+            sendData: sendTransactionsData,
+            successMessageType: 'sent',
+            onSuccess: (data) => {
+                return {
+                    outcomes: data.outcomes.map((map) => Object.fromEntries(map.entries()))
+                };
+            },
+            isUserRejection: (msg) => msg === "User rejected the transactions"
+        });
+    }
 }
 const STORAGE_KEY_ACCOUNT_ID = 'accountId';
 const STORAGE_KEY_APP_PRIVATE_KEY = 'appPrivateKey';

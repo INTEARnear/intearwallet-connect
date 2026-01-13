@@ -288,6 +288,18 @@ export interface SignedMessage {
 }
 
 /**
+ * Result of sending transactions to the wallet.
+ * Contains the execution outcomes for each transaction.
+ */
+export interface SendTransactionsResult {
+    /**
+     * Array of execution outcomes for each transaction, in the same order as the transactions were sent.
+     * Each outcome is the FinalExecutionOutcomeViewEnum as returned by NEAR RPC.
+     */
+    outcomes: object[];
+}
+
+/**
  * Options for requesting a connection to the Intear Wallet
  */
 export interface ConnectionOptions {
@@ -427,6 +439,83 @@ class ConnectedAccount {
                 };
             },
             isUserRejection: (msg) => msg === "User rejected the signature"
+        });
+    }
+
+    /**
+     * Sends transactions to be signed and executed via wallet popup
+     * @param transactions - Array of transactions to send. Each transaction specifies signerId, receiverId, and actions.
+     * @returns A promise that resolves with the execution outcomes, or null if user rejected
+     * @throws Error if not connected or sending fails
+     */
+    async sendTransactions(transactions: Transaction[]): Promise<SendTransactionsResult | null> {
+        if (this.disconnected) {
+            throw new Error('Account is disconnected');
+        }
+
+        if (!this.#connector.walletUrl) {
+            throw new Error('Wallet URL not available');
+        }
+
+        const privateKeyJwk = await this.#connector.storage.get(STORAGE_KEY_APP_PRIVATE_KEY);
+        if (!privateKeyJwk) {
+            throw new Error('Private key not found in storage');
+        }
+
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            privateKeyJwk,
+            { name: 'Ed25519' },
+            true,
+            ['sign']
+        );
+        const publicKeyBytes = base64Decode(privateKeyJwk.x);
+        const publicKeyBase58 = base58Encode(publicKeyBytes);
+        const publicKey = `ed25519:${publicKeyBase58}`;
+
+        const serializableTransactions = transactions.map(tx => ({
+            signerId: tx.signerId,
+            receiverId: tx.receiverId,
+            actions: tx.actions,
+        }));
+        const transactionsJson = JSON.stringify(serializableTransactions);
+
+        const nonce = Date.now();
+        const messageToHash = `${nonce}|${transactionsJson}`;
+        const hashedMessage = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(messageToHash));
+
+        const signatureBuffer = await crypto.subtle.sign(
+            { name: 'Ed25519' },
+            privateKey,
+            hashedMessage
+        );
+
+        const signatureBytes = new Uint8Array(signatureBuffer);
+        const signatureBase58 = base58Encode(signatureBytes);
+        const signature = `ed25519:${signatureBase58}`;
+
+        const sendTransactionsData = {
+            accountId: this.accountId,
+            publicKey,
+            nonce,
+            signature,
+            transactions: transactionsJson
+        };
+
+        const walletUrl = this.#connector.walletUrl;
+
+        return openPopupFlow<SendTransactionsResult>({
+            path: '/send-transactions',
+            walletUrl,
+            sendMessageType: 'signAndSendTransactions',
+            sendData: sendTransactionsData,
+            successMessageType: 'sent',
+            onSuccess: (data) => {
+                return {
+                    outcomes: data.outcomes.map((map: Map<string, any>) => Object.fromEntries(map.entries()))
+                };
+            },
+            isUserRejection: (msg) => msg === "User rejected the transactions"
         });
     }
 }
@@ -709,3 +798,100 @@ export class LocalStorageStorage implements Storage {
 }
 
 export default IntearWalletConnector;
+
+export interface CreateAccountAction {
+    type: "CreateAccount";
+}
+
+export interface DeployContractAction {
+    type: "DeployContract";
+    params: {
+        code: number[];
+    };
+}
+
+export interface FunctionCallAction {
+    type: "FunctionCall";
+    params: {
+        methodName: string;
+        args: object;
+        gas: string;
+        deposit: string;
+    };
+}
+
+export interface TransferAction {
+    type: "Transfer";
+    params: {
+        deposit: string;
+    };
+}
+
+export interface StakeAction {
+    type: "Stake";
+    params: {
+        stake: string;
+        publicKey: string;
+    };
+}
+
+export type AddKeyPermission =
+    | "FullAccess"
+    | {
+        receiverId: string;
+        allowance?: string;
+        methodNames?: Array<string>;
+    };
+
+export interface AddKeyAction {
+    type: "AddKey";
+    params: {
+        publicKey: string;
+        accessKey: {
+            nonce?: number;
+            permission: AddKeyPermission;
+        };
+    };
+}
+
+export interface DeleteKeyAction {
+    type: "DeleteKey";
+    params: {
+        publicKey: string;
+    };
+}
+
+export interface DeleteAccountAction {
+    type: "DeleteAccount";
+    params: {
+        beneficiaryId: string;
+    };
+}
+
+export interface UseGlobalContractAction {
+    type: "UseGlobalContract";
+    params: { contractIdentifier: { accountId: string } | { codeHash: string } };
+}
+
+export interface DeployGlobalContractAction {
+    type: "DeployGlobalContract";
+    params: { code: number[]; deployMode: "CodeHash" | "AccountId" };
+}
+
+export type Action =
+    | CreateAccountAction
+    | DeployContractAction
+    | FunctionCallAction
+    | TransferAction
+    | StakeAction
+    | AddKeyAction
+    | DeleteKeyAction
+    | DeleteAccountAction
+    | UseGlobalContractAction
+    | DeployGlobalContractAction;
+
+export interface Transaction {
+    signerId: string;
+    receiverId: string;
+    actions: Array<Action>;
+}
