@@ -114,6 +114,16 @@
       box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
     }
 
+    #connectNativeBtn {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      color: white;
+    }
+
+    #connectNativeBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+    }
+
     #signMessageBtn {
       background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
       color: white;
@@ -215,6 +225,7 @@
     <div class="button-group">
       <button id="connectBtn">Connect</button>
       <button id="connectSignBtn">Connect + Sign</button>
+      <button id="connectNativeBtn">Connect via App</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="sendTxBtn" disabled>Send Transaction</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
@@ -235,12 +246,13 @@
   </div>
 
   <script type="module">
-    import { IntearWalletConnector, LocalStorageStorage } from './index.js';
+    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL } from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
     const connectSignBtn = document.getElementById('connectSignBtn');
+    const connectNativeBtn = document.getElementById('connectNativeBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
     const sendTxBtn = document.getElementById('sendTxBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
@@ -261,6 +273,7 @@
         setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
         connectBtn.disabled = true;
         connectSignBtn.disabled = true;
+        connectNativeBtn.disabled = true;
         signMessageBtn.disabled = false;
         sendTxBtn.disabled = false;
         disconnectBtn.disabled = false;
@@ -268,6 +281,7 @@
         setStatus('Not connected');
         connectBtn.disabled = false;
         connectSignBtn.disabled = false;
+        connectNativeBtn.disabled = false;
         signMessageBtn.disabled = true;
         sendTxBtn.disabled = true;
         disconnectBtn.disabled = true;
@@ -331,6 +345,27 @@
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         connectSignBtn.textContent = 'Connect + Sign';
+      }
+    });
+
+    connectNativeBtn.addEventListener('click', async () => {
+      try {
+        connectNativeBtn.textContent = 'Connecting...';
+        const result = await connector.requestConnection({
+          walletUrl: INTEAR_NATIVE_WALLET_URL
+        });
+        console.log('result:', result);
+        connectNativeBtn.textContent = 'Connect via App';
+
+        if (result === null) {
+          setStatus('Connection rejected by user', 'rejected');
+        } else {
+          updateUI();
+        }
+      } catch (error) {
+        console.error('Connection failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        connectNativeBtn.textContent = 'Connect via App';
       }
     });
 

@@ -1,4 +1,10 @@
 /**
+ * The native wallet URL for Intear Wallet desktop/mobile apps.
+ * Use this as the walletUrl option to connect via the native app instead of web popup.
+ */
+export const INTEAR_NATIVE_WALLET_URL = "intear://" as const;
+
+/**
  * Decodes a base64url string to byte array
  * @param str - The base64 or base64url encoded string
  * @returns The decoded byte array
@@ -110,13 +116,15 @@ function base58Decode(str: string): Uint8Array {
 }
 
 /**
- * Configuration for popup flow
+ * Configuration for wallet flow (popup or native app)
  */
-interface PopupFlowConfig<TResponse> {
-    /** URL path to open in the popup (appended to walletUrl) or page of intear:// url */
-    path: string;
+interface WalletFlowConfig<TResponse> {
+    /** Method to call on the wallet, which is used as either wallet.intear.tech/<method> or intear://<method>?session_id=<session_id> */
+    method: string;
     /** Wallet base URL */
-    walletUrl: "intear://" | string;
+    walletUrl: typeof INTEAR_NATIVE_WALLET_URL | string;
+    /** Logout bridge WebSocket URL for native app communication */
+    logoutBridgeUrl: string;
     /** Message type to send when popup is ready */
     sendMessageType: string;
     /** Data to send to the popup */
@@ -130,14 +138,14 @@ interface PopupFlowConfig<TResponse> {
 }
 
 /**
- * Opens a popup and handles the message flow with the wallet
+ * Opens a popup and handles the message flow with the wallet (web popup flow)
  * @param config - Configuration for the popup flow
  * @returns A promise that resolves with the response, or null if user rejected/closed
  * @throws Error if popup fails to open or wallet returns an error
  */
-async function openPopupFlow<TResponse>(config: PopupFlowConfig<TResponse>): Promise<TResponse | null> {
+async function openPopupFlow<TResponse>(config: WalletFlowConfig<TResponse>): Promise<TResponse | null> {
     const popup = window.open(
-        `${config.walletUrl}${config.path}`,
+        `${config.walletUrl}/${config.method}`,
         "_blank",
         'width=400,height=700,scrollbars=yes,resizable=yes'
     );
@@ -207,6 +215,109 @@ async function openPopupFlow<TResponse>(config: PopupFlowConfig<TResponse>): Pro
             }
         }, 100);
     });
+}
+
+/**
+ * Handles the native app flow using WebSocket bridge and intear:// URLs
+ * @param config - Configuration for the wallet flow
+ * @returns A promise that resolves with the response, or null if user rejected/closed
+ * @throws Error if WebSocket connection fails or wallet returns an error
+ */
+async function openNativeAppFlow<TResponse>(config: WalletFlowConfig<TResponse>): Promise<TResponse | null> {
+    const bridgeUrl = config.logoutBridgeUrl;
+    const wsUrl = `${bridgeUrl}/api/session/create`;
+
+    return new Promise<TResponse | null>((resolve, reject) => {
+        let resultReceived = false;
+        let ws: WebSocket | null = null;
+
+        const cleanup = () => {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        };
+
+        try {
+            ws = new WebSocket(wsUrl);
+        } catch (error) {
+            reject(new Error(`Failed to connect to logout bridge: ${error}`));
+            return;
+        }
+
+        ws.onmessage = async (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                // First message should contain the session ID
+                if (data.session_id && !resultReceived) {
+                    const sessionId = data.session_id;
+
+                    // Send the request data over WebSocket
+                    ws!.send(JSON.stringify({
+                        type: config.sendMessageType,
+                        data: config.sendData
+                    }));
+
+                    const intearUrl = `intear://${config.method}?session_id=${encodeURIComponent(sessionId)}`;
+
+                    // Open the native app URL via hidden iframe (window.location.href doesn't work with custom protocols)
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = intearUrl;
+                    document.body.appendChild(iframe);
+                    // Clean up iframe after a short delay
+                    // setTimeout(() => iframe.remove(), 1000);
+                } else if (data.type === config.successMessageType && !resultReceived) {
+                    resultReceived = true;
+                    cleanup();
+                    try {
+                        resolve(await config.onSuccess(data));
+                    } catch (err) {
+                        reject(err);
+                    }
+                } else if (data.type === 'error' && !resultReceived) {
+                    resultReceived = true;
+                    cleanup();
+                    if (config.isUserRejection?.(data.message)) {
+                        resolve(null);
+                    } else {
+                        reject(new Error(data.message || 'Operation failed'));
+                    }
+                }
+            } catch (error) {
+                // Ignore JSON parse errors
+            }
+        };
+
+        ws.onerror = (error) => {
+            if (!resultReceived) {
+                cleanup();
+                reject(new Error('WebSocket connection error to logout bridge'));
+            }
+        };
+
+        ws.onclose = () => {
+            if (!resultReceived) {
+                // Likely timed out without user responding in the app
+                resolve(null);
+            }
+        };
+    });
+}
+
+/**
+ * Opens the wallet flow using either popup (web) or native app (intear://) transport
+ * @param config - Configuration for the wallet flow
+ * @returns A promise that resolves with the response, or null if user rejected/closed
+ * @throws Error if the flow fails
+ */
+async function openWalletFlow<TResponse>(config: WalletFlowConfig<TResponse>): Promise<TResponse | null> {
+    if (config.walletUrl === INTEAR_NATIVE_WALLET_URL) {
+        return openNativeAppFlow(config);
+    } else {
+        return openPopupFlow(config);
+    }
 }
 
 /**
@@ -308,9 +419,16 @@ export interface ConnectionOptions {
      */
     networkId?: string;
     /**
-     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech')
+     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech').
+     * Use INTEAR_NATIVE_WALLET_URL ('intear://') to connect via the native desktop/mobile app.
      */
-    walletUrl?: string;
+    walletUrl?: typeof INTEAR_NATIVE_WALLET_URL | string;
+    /**
+     * The logout bridge WebSocket URL for native app communication.
+     * Only used when walletUrl is INTEAR_NATIVE_WALLET_URL.
+     * Defaults to 'wss://logout-bridge-service.intear.tech'.
+     */
+    logoutBridgeUrl?: string;
     /**
      * Optional NEP-413 message to sign during connection
      */
@@ -369,7 +487,7 @@ class ConnectedAccount {
             throw new Error('Nonce must be 32 bytes');
         }
 
-        if (!this.#connector.walletUrl) {
+        if (!this.#connector.walletUrl || !this.#connector.logoutBridgeUrl) {
             throw new Error('Wallet URL not available');
         }
 
@@ -420,10 +538,12 @@ class ConnectedAccount {
         };
 
         const walletUrl = this.#connector.walletUrl;
+        const logoutBridgeUrl = this.#connector.logoutBridgeUrl;
 
-        return openPopupFlow<SignedMessage>({
-            path: '/sign-message',
+        return openWalletFlow<SignedMessage>({
+            method: 'sign-message',
             walletUrl,
+            logoutBridgeUrl,
             sendMessageType: 'signMessage',
             sendData: signMessageData,
             successMessageType: 'signed',
@@ -453,7 +573,7 @@ class ConnectedAccount {
             throw new Error('Account is disconnected');
         }
 
-        if (!this.#connector.walletUrl) {
+        if (!this.#connector.walletUrl || !this.#connector.logoutBridgeUrl) {
             throw new Error('Wallet URL not available');
         }
 
@@ -503,10 +623,12 @@ class ConnectedAccount {
         };
 
         const walletUrl = this.#connector.walletUrl;
+        const logoutBridgeUrl = this.#connector.logoutBridgeUrl;
 
-        return openPopupFlow<SendTransactionsResult>({
-            path: '/send-transactions',
+        return openWalletFlow<SendTransactionsResult>({
+            method: 'send-transactions',
             walletUrl,
+            logoutBridgeUrl,
             sendMessageType: 'signAndSendTransactions',
             sendData: sendTransactionsData,
             successMessageType: 'sent',
@@ -523,13 +645,15 @@ class ConnectedAccount {
 const STORAGE_KEY_ACCOUNT_ID = 'accountId';
 const STORAGE_KEY_APP_PRIVATE_KEY = 'appPrivateKey';
 const STORAGE_KEY_WALLET_URL = 'walletUrl';
+const STORAGE_KEY_LOGOUT_BRIDGE_URL = 'logoutBridgeUrl';
 
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
  */
 export class IntearWalletConnector {
     #connectedAccount: ConnectedAccount | null;
-    walletUrl?: "intear://" | string;
+    walletUrl?: typeof INTEAR_NATIVE_WALLET_URL | string;
+    logoutBridgeUrl?: string;
     storage: Storage;
 
     /**
@@ -543,16 +667,18 @@ export class IntearWalletConnector {
         }
         const accountId = await storage.get(STORAGE_KEY_ACCOUNT_ID);
         const walletUrl = await storage.get(STORAGE_KEY_WALLET_URL);
-        const connector = new IntearWalletConnector(storage, null, walletUrl);
+        const logoutBridgeUrl = await storage.get(STORAGE_KEY_LOGOUT_BRIDGE_URL);
+        const connector = new IntearWalletConnector(storage, null, walletUrl, logoutBridgeUrl);
         const connectedAccount = accountId ? new ConnectedAccount(accountId, connector) : null;
         connector.#connectedAccount = connectedAccount;
         return connector;
     }
 
-    private constructor(storage: Storage, connectedAccount: ConnectedAccount | null, walletUrl: "intear://" | string) {
+    private constructor(storage: Storage, connectedAccount: ConnectedAccount | null, walletUrl: typeof INTEAR_NATIVE_WALLET_URL | string, logoutBridgeUrl?: string) {
         this.storage = storage;
         this.#connectedAccount = connectedAccount;
         this.walletUrl = walletUrl;
+        this.logoutBridgeUrl = logoutBridgeUrl;
     }
 
     /**
@@ -577,6 +703,7 @@ export class IntearWalletConnector {
         const {
             networkId = 'mainnet',
             walletUrl = 'https://wallet.intear.tech',
+            logoutBridgeUrl = "wss://logout-bridge-service.intear.tech",
             messageToSign: nep413MessageToSign
         } = options;
 
@@ -640,9 +767,10 @@ export class IntearWalletConnector {
             actualOrigin: origin
         };
 
-        return openPopupFlow<ConnectionResult>({
-            path: '/connect',
+        return openWalletFlow<ConnectionResult>({
+            method: 'connect',
             walletUrl,
+            logoutBridgeUrl,
             sendMessageType: 'signIn',
             sendData: signInData,
             successMessageType: 'connected',
@@ -652,11 +780,13 @@ export class IntearWalletConnector {
                 }
                 const accountId = data.accounts[0].accountId;
                 this.#connectedAccount = new ConnectedAccount(accountId, this);
-                const responseWalletUrl = data.walletUrl || walletUrl;
+                const responseWalletUrl = walletUrl === INTEAR_NATIVE_WALLET_URL ? walletUrl : data.walletUrl;
                 this.walletUrl = responseWalletUrl;
+                this.logoutBridgeUrl = logoutBridgeUrl;
                 const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
                 await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
                 await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
+                await this.storage.set(STORAGE_KEY_LOGOUT_BRIDGE_URL, logoutBridgeUrl);
                 await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
 
                 const result: ConnectionResult = { account: this.#connectedAccount };
@@ -691,9 +821,11 @@ export class IntearWalletConnector {
             this.#connectedAccount.disconnected = true;
             this.#connectedAccount = null;
             this.walletUrl = undefined;
+            this.logoutBridgeUrl = undefined;
             await this.storage.remove(STORAGE_KEY_ACCOUNT_ID);
             await this.storage.remove(STORAGE_KEY_APP_PRIVATE_KEY);
             await this.storage.remove(STORAGE_KEY_WALLET_URL);
+            await this.storage.remove(STORAGE_KEY_LOGOUT_BRIDGE_URL);
         } else {
             throw new Error('Account is not connected');
         }

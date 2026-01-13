@@ -1,4 +1,9 @@
 /**
+ * The native wallet URL for Intear Wallet desktop/mobile apps.
+ * Use this as the walletUrl option to connect via the native app instead of web popup.
+ */
+export declare const INTEAR_NATIVE_WALLET_URL: "intear://";
+/**
  * Storage - A storage interface that is used by the connector to store its internal data
  */
 export interface Storage {
@@ -93,9 +98,16 @@ export interface ConnectionOptions {
      */
     networkId?: string;
     /**
-     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech')
+     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech').
+     * Use INTEAR_NATIVE_WALLET_URL ('intear://') to connect via the native desktop/mobile app.
      */
-    walletUrl?: string;
+    walletUrl?: typeof INTEAR_NATIVE_WALLET_URL | string;
+    /**
+     * The logout bridge WebSocket URL for native app communication.
+     * Only used when walletUrl is INTEAR_NATIVE_WALLET_URL.
+     * Defaults to 'wss://logout-bridge-service.intear.tech'.
+     */
+    logoutBridgeUrl?: string;
     /**
      * Optional NEP-413 message to sign during connection
      */
@@ -149,7 +161,8 @@ declare class ConnectedAccount {
  */
 export declare class IntearWalletConnector {
     #private;
-    walletUrl?: "intear://" | string;
+    walletUrl?: typeof INTEAR_NATIVE_WALLET_URL | string;
+    logoutBridgeUrl?: string;
     storage: Storage;
     /**
      * Creates a new IntearWalletConnector instance
