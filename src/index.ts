@@ -117,8 +117,6 @@ interface PopupFlowConfig<TResponse> {
     path: string;
     /** Wallet base URL */
     walletUrl: string;
-    /** Popup window name */
-    windowName: string;
     /** Message type to send when popup is ready */
     sendMessageType: string;
     /** Data to send to the popup */
@@ -140,7 +138,7 @@ interface PopupFlowConfig<TResponse> {
 async function openPopupFlow<TResponse>(config: PopupFlowConfig<TResponse>): Promise<TResponse | null> {
     const popup = window.open(
         `${config.walletUrl}${config.path}`,
-        config.windowName,
+        "_blank",
         'width=400,height=700,scrollbars=yes,resizable=yes'
     );
 
@@ -382,7 +380,6 @@ class ConnectedAccount {
         return openPopupFlow<SignedMessage>({
             path: '/sign-message',
             walletUrl,
-            windowName: 'IntearWalletSignMessage',
             sendMessageType: 'signMessage',
             sendData: signMessageData,
             successMessageType: 'signed',
@@ -503,7 +500,6 @@ export class IntearWalletConnector {
         return openPopupFlow<ConnectedAccount>({
             path: '/connect',
             walletUrl,
-            windowName: 'IntearWalletConnect',
             sendMessageType: 'signIn',
             sendData: signInData,
             successMessageType: 'connected',

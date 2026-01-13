@@ -103,7 +103,7 @@ function base58Decode(str) {
  * @throws Error if popup fails to open or wallet returns an error
  */
 async function openPopupFlow(config) {
-    const popup = window.open(`${config.walletUrl}${config.path}`, config.windowName, 'width=400,height=700,scrollbars=yes,resizable=yes');
+    const popup = window.open(`${config.walletUrl}${config.path}`, "_blank", 'width=400,height=700,scrollbars=yes,resizable=yes');
     if (!popup) {
         throw new Error('Failed to open wallet popup.');
     }
@@ -235,7 +235,6 @@ class ConnectedAccount {
         return openPopupFlow({
             path: '/sign-message',
             walletUrl,
-            windowName: 'IntearWalletSignMessage',
             sendMessageType: 'signMessage',
             sendData: signMessageData,
             successMessageType: 'signed',
@@ -334,7 +333,6 @@ export class IntearWalletConnector {
         return openPopupFlow({
             path: '/connect',
             walletUrl,
-            windowName: 'IntearWalletConnect',
             sendMessageType: 'signIn',
             sendData: signInData,
             successMessageType: 'connected',
