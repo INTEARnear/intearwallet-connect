@@ -74,6 +74,36 @@ export interface SignedMessage {
     state?: string | null;
 }
 /**
+ * Options for requesting a connection to the Intear Wallet
+ */
+export interface ConnectionOptions {
+    /**
+     * The network ID to connect to (defaults to 'mainnet')
+     */
+    networkId?: string;
+    /**
+     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech')
+     */
+    walletUrl?: string;
+    /**
+     * Optional NEP-413 message to sign during connection
+     */
+    messageToSign?: Nep413Payload;
+}
+/**
+ * Result of a successful connection to the Intear Wallet
+ */
+export interface ConnectionResult {
+    /**
+     * The connected account
+     */
+    account: ConnectedAccount;
+    /**
+     * The signed message, if messageToSign was provided in ConnectionOptions
+     */
+    signedMessage?: SignedMessage;
+}
+/**
  * ConnectedAccount - A connected Intear Wallet account and its data
  */
 declare class ConnectedAccount {
@@ -101,7 +131,7 @@ declare class ConnectedAccount {
  */
 export declare class IntearWalletConnector {
     #private;
-    walletUrl: string | null;
+    walletUrl?: "intear://" | string;
     storage: Storage;
     /**
      * Creates a new IntearWalletConnector instance
@@ -117,12 +147,11 @@ export declare class IntearWalletConnector {
     get connectedAccount(): ConnectedAccount | null;
     /**
      * Requests a connection to the Intear Wallet
-     * @param networkId - The network ID to connect to
-     * @param walletUrl - The URL of the wallet to connect to
-     * @returns A promise that resolves with the connected account, or null if user has rejected the connection
+     * @param options - Connection options including networkId, walletUrl, and optional messageToSign
+     * @returns A promise that resolves with the connection result, or null if user has rejected the connection
      * @throws Error If the failed to open the wallet popup or already connected
      */
-    requestConnection(networkId?: string, walletUrl?: string): Promise<ConnectedAccount | null>;
+    requestConnection(options?: ConnectionOptions): Promise<ConnectionResult | null>;
     /**
      * Disconnects from the Intear Wallet
      * @throws Error If the account is not connected

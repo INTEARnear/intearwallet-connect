@@ -293,14 +293,17 @@ export class IntearWalletConnector {
     }
     /**
      * Requests a connection to the Intear Wallet
-     * @param networkId - The network ID to connect to
-     * @param walletUrl - The URL of the wallet to connect to
-     * @returns A promise that resolves with the connected account, or null if user has rejected the connection
+     * @param options - Connection options including networkId, walletUrl, and optional messageToSign
+     * @returns A promise that resolves with the connection result, or null if user has rejected the connection
      * @throws Error If the failed to open the wallet popup or already connected
      */
-    async requestConnection(networkId = 'mainnet', walletUrl = 'https://wallet.intear.tech') {
+    async requestConnection(options = {}) {
         if (this.#connectedAccount !== null) {
             throw new Error('Already connected');
+        }
+        const { networkId = 'mainnet', walletUrl = 'https://wallet.intear.tech', messageToSign: nep413MessageToSign } = options;
+        if (nep413MessageToSign && nep413MessageToSign.nonce.length !== 32) {
+            throw new Error('Nonce must be 32 bytes');
         }
         const keyPair = await crypto.subtle.generateKey({
             name: 'Ed25519'
@@ -311,10 +314,24 @@ export class IntearWalletConnector {
         const publicKeyBase58 = base58Encode(publicKeyBytes);
         const publicKey = `ed25519:${publicKeyBase58}`;
         const origin = window.location.origin;
-        const message = JSON.stringify({ origin });
+        let messagePayload;
+        if (nep413MessageToSign) {
+            const nep413Payload = JSON.stringify({
+                message: nep413MessageToSign.message,
+                nonce: Array.from(nep413MessageToSign.nonce),
+                recipient: nep413MessageToSign.recipient,
+                callback_url: nep413MessageToSign.callbackUrl ?? null,
+                state: nep413MessageToSign.state ?? null
+            });
+            messagePayload = { origin, messageToSign: nep413Payload };
+        }
+        else {
+            messagePayload = { origin };
+        }
+        const message = JSON.stringify(messagePayload);
         const nonce = Date.now();
-        const messageToSign = `${nonce}|${message}`;
-        const hashedMessage = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(messageToSign));
+        const messageToHash = `${nonce}|${message}`;
+        const hashedMessage = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(messageToHash));
         const signatureBuffer = await crypto.subtle.sign({
             name: 'Ed25519'
         }, keyPair.privateKey, hashedMessage);
@@ -348,7 +365,22 @@ export class IntearWalletConnector {
                 await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
                 await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
                 await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
-                return this.#connectedAccount;
+                const result = { account: this.#connectedAccount };
+                if (nep413MessageToSign) {
+                    if (!data.signedMessage) {
+                        throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
+                    }
+                    const signatureWithoutPrefix = data.signedMessage.signature.split(':')[1];
+                    const sigBytes = base58Decode(signatureWithoutPrefix);
+                    const signatureBase64 = base64Encode(sigBytes);
+                    result.signedMessage = {
+                        accountId: data.signedMessage.accountId,
+                        publicKey: data.signedMessage.publicKey,
+                        signature: signatureBase64,
+                        state: data.signedMessage.state
+                    };
+                }
+                return result;
             },
             isUserRejection: (msg) => msg === "User rejected the connection"
         });
@@ -361,7 +393,7 @@ export class IntearWalletConnector {
         if (this.#connectedAccount !== null) {
             this.#connectedAccount.disconnected = true;
             this.#connectedAccount = null;
-            this.walletUrl = null;
+            this.walletUrl = undefined;
             await this.storage.remove(STORAGE_KEY_ACCOUNT_ID);
             await this.storage.remove(STORAGE_KEY_APP_PRIVATE_KEY);
             await this.storage.remove(STORAGE_KEY_WALLET_URL);

@@ -103,6 +103,16 @@
       box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
     }
 
+    #connectSignBtn {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+    }
+
+    #connectSignBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+    }
+
     #signMessageBtn {
       background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
       color: white;
@@ -160,7 +170,8 @@
     <h1>🔗 Intear Wallet Connector</h1>
     <div id="status">Not connected</div>
     <div class="button-group">
-      <button id="connectBtn">Connect Wallet</button>
+      <button id="connectBtn">Connect</button>
+      <button id="connectSignBtn">Connect + Sign</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
@@ -181,6 +192,7 @@
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
+    const connectSignBtn = document.getElementById('connectSignBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const signatureResult = document.getElementById('signatureResult');
@@ -197,11 +209,13 @@
       if (connector.connectedAccount) {
         setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
         connectBtn.disabled = true;
+        connectSignBtn.disabled = true;
         signMessageBtn.disabled = false;
         disconnectBtn.disabled = false;
       } else {
         setStatus('Not connected');
         connectBtn.disabled = false;
+        connectSignBtn.disabled = false;
         signMessageBtn.disabled = true;
         disconnectBtn.disabled = true;
         signatureResult.classList.remove('visible');
@@ -213,7 +227,7 @@
         connectBtn.textContent = 'Connecting...';
         const result = await connector.requestConnection();
         console.log('result:', result);
-        connectBtn.textContent = 'Connect Wallet';
+        connectBtn.textContent = 'Connect';
         
         if (result === null) {
           setStatus('Connection rejected by user', 'rejected');
@@ -223,7 +237,46 @@
       } catch (error) {
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
-        connectBtn.textContent = 'Connect Wallet';
+        connectBtn.textContent = 'Connect';
+      }
+    });
+
+    connectSignBtn.addEventListener('click', async () => {
+      try {
+        connectSignBtn.textContent = 'Connecting...';
+        
+        // Generate a random 32-byte nonce
+        const nonceBytes = new Uint8Array(32);
+        crypto.getRandomValues(nonceBytes);
+        
+        const result = await connector.requestConnection({
+          messageToSign: {
+            message: 'Sign in to Intear Wallet Connect Example',
+            nonce: nonceBytes,
+            recipient: 'intearwallet-connect-example',
+            callbackUrl: null,
+            state: null
+          }
+        });
+        console.log('result:', result);
+        connectSignBtn.textContent = 'Connect + Sign';
+        
+        if (result === null) {
+          setStatus('Connection rejected by user', 'rejected');
+        } else {
+          updateUI();
+          // Display the signed message from connection
+          if (result.signedMessage) {
+            sigAccountId.textContent = result.signedMessage.accountId;
+            sigPublicKey.textContent = result.signedMessage.publicKey;
+            sigSignature.textContent = result.signedMessage.signature;
+            signatureResult.classList.add('visible');
+          }
+        }
+      } catch (error) {
+        console.error('Connection failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        connectSignBtn.textContent = 'Connect + Sign';
       }
     });
 
