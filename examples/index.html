@@ -293,7 +293,9 @@
     connectBtn.addEventListener('click', async () => {
       try {
         connectBtn.textContent = 'Connecting...';
-        const result = await connector.requestConnection();
+        const result = await connector.requestConnection({
+          walletUrl: "https://staging.wallet.intear.tech"
+        });
         console.log('result:', result);
         connectBtn.textContent = 'Connect';
 
@@ -324,7 +326,8 @@
             recipient: 'intearwallet-connect-example',
             callbackUrl: null,
             state: null
-          }
+          },
+          walletUrl: "https://staging.wallet.intear.tech"
         });
         console.log('result:', result);
         connectSignBtn.textContent = 'Connect + Sign';

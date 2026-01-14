@@ -13,6 +13,7 @@
         "example": "npm run build && node -e \"require('fs').writeFileSync('examples/index.js', require('fs').readFileSync('build/index.js'))\" && npx serve examples"
     },
     "devDependencies": {
+        "serve": "^14.2.5",
         "typescript": "^5.9.3"
     },
     "keywords": [

@@ -236,16 +236,17 @@ export declare class LocalStorageStorage implements Storage {
     remove(key: string): Promise<any | null>;
 }
 export default IntearWalletConnector;
-export interface CreateAccountAction {
+export type SelectorAction = LegacySelectorAction | NearAction;
+export interface LegacyCreateAccountAction {
     type: "CreateAccount";
 }
-export interface DeployContractAction {
+export interface LegacyDeployContractAction {
     type: "DeployContract";
     params: {
         code: number[];
     };
 }
-export interface FunctionCallAction {
+export interface LegacyFunctionCallAction {
     type: "FunctionCall";
     params: {
         methodName: string;
@@ -254,13 +255,13 @@ export interface FunctionCallAction {
         deposit: string;
     };
 }
-export interface TransferAction {
+export interface LegacyTransferAction {
     type: "Transfer";
     params: {
         deposit: string;
     };
 }
-export interface StakeAction {
+export interface LegacyStakeAction {
     type: "Stake";
     params: {
         stake: string;
@@ -272,7 +273,7 @@ export type AddKeyPermission = "FullAccess" | {
     allowance?: string;
     methodNames?: Array<string>;
 };
-export interface AddKeyAction {
+export interface LegacyAddKeyAction {
     type: "AddKey";
     params: {
         publicKey: string;
@@ -282,19 +283,19 @@ export interface AddKeyAction {
         };
     };
 }
-export interface DeleteKeyAction {
+export interface LegacyDeleteKeyAction {
     type: "DeleteKey";
     params: {
         publicKey: string;
     };
 }
-export interface DeleteAccountAction {
+export interface LegacyDeleteAccountAction {
     type: "DeleteAccount";
     params: {
         beneficiaryId: string;
     };
 }
-export interface UseGlobalContractAction {
+export interface LegacyUseGlobalContractAction {
     type: "UseGlobalContract";
     params: {
         contractIdentifier: {
@@ -304,16 +305,87 @@ export interface UseGlobalContractAction {
         };
     };
 }
-export interface DeployGlobalContractAction {
+export interface LegacyDeployGlobalContractAction {
     type: "DeployGlobalContract";
     params: {
         code: number[];
         deployMode: "CodeHash" | "AccountId";
     };
 }
-export type Action = CreateAccountAction | DeployContractAction | FunctionCallAction | TransferAction | StakeAction | AddKeyAction | DeleteKeyAction | DeleteAccountAction | UseGlobalContractAction | DeployGlobalContractAction;
+export type LegacySelectorAction = LegacyCreateAccountAction | LegacyDeployContractAction | LegacyFunctionCallAction | LegacyTransferAction | LegacyStakeAction | LegacyAddKeyAction | LegacyDeleteKeyAction | LegacyDeleteAccountAction | LegacyUseGlobalContractAction | LegacyDeployGlobalContractAction;
+export type AccessKeyPermission = "FullAccess" | {
+    FunctionCall: {
+        allowance: string | null;
+        receiver_id: string;
+        method_names: string[];
+    };
+};
+export interface AddKeyAction {
+    public_key: string;
+    access_key: {
+        nonce: number;
+        permission: AccessKeyPermission;
+    };
+}
+export interface CreateAccountAction {
+}
+export interface DeleteAccountAction {
+    beneficiary_id: string;
+}
+export interface DeleteKeyAction {
+    public_key: string;
+}
+export interface DeployContractAction {
+    code: string;
+}
+export interface DeployGlobalContractAction {
+    code: string;
+    deploy_mode: "CodeHash" | "AccountId";
+}
+export type GlobalContractIdentifier = {
+    CodeHash: string;
+} | {
+    AccountId: string;
+};
+export interface UseGlobalContractAction {
+    contract_identifier: GlobalContractIdentifier;
+}
+export interface FunctionCallAction {
+    method_name: string;
+    args: string;
+    gas: string | number;
+    deposit: string;
+}
+export interface StakeAction {
+    stake: string;
+    public_key: string;
+}
+export interface TransferAction {
+    deposit: string;
+}
+export type NearAction = {
+    CreateAccount: CreateAccountAction;
+} | {
+    DeployContract: DeployContractAction;
+} | {
+    FunctionCall: FunctionCallAction;
+} | {
+    Transfer: TransferAction;
+} | {
+    Stake: StakeAction;
+} | {
+    AddKey: AddKeyAction;
+} | {
+    DeleteKey: DeleteKeyAction;
+} | {
+    DeleteAccount: DeleteAccountAction;
+} | {
+    DeployGlobalContract: DeployGlobalContractAction;
+} | {
+    UseGlobalContract: UseGlobalContractAction;
+};
 export interface Transaction {
     signerId: string;
     receiverId: string;
-    actions: Array<Action>;
+    actions: Array<SelectorAction>;
 }

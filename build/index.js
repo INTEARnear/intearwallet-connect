@@ -340,13 +340,10 @@ class ConnectedAccount {
             sendData: signMessageData,
             successMessageType: 'signed',
             onSuccess: (data) => {
-                const signatureWithoutPrefix = data.signature.signature.split(':')[1];
-                const signatureBytes = base58Decode(signatureWithoutPrefix);
-                const signatureBase64 = base64Encode(signatureBytes);
                 return {
                     accountId: data.signature.accountId,
                     publicKey: data.signature.publicKey,
-                    signature: signatureBase64,
+                    signature: data.signature.signature,
                     state: data.signature.state
                 };
             },
@@ -405,7 +402,7 @@ class ConnectedAccount {
             successMessageType: 'sent',
             onSuccess: (data) => {
                 return {
-                    outcomes: data.outcomes.map((map) => Object.fromEntries(map.entries()))
+                    outcomes: data.outcomes
                 };
             },
             isUserRejection: (msg) => msg === "User rejected the transactions"
@@ -486,10 +483,10 @@ export class IntearWalletConnector {
                 callback_url: nep413MessageToSign.callbackUrl ?? null,
                 state: nep413MessageToSign.state ?? null
             });
-            messagePayload = { origin, messageToSign: nep413Payload };
+            messagePayload = { messageToSign: nep413Payload };
         }
         else {
-            messagePayload = { origin };
+            messagePayload = {};
         }
         const message = JSON.stringify(messagePayload);
         const nonce = Date.now();
@@ -507,7 +504,7 @@ export class IntearWalletConnector {
             nonce,
             message,
             signature,
-            version: 'V2',
+            version: 'V3',
             actualOrigin: origin
         };
         return openWalletFlow({
@@ -518,12 +515,9 @@ export class IntearWalletConnector {
             sendData: signInData,
             successMessageType: 'connected',
             onSuccess: async (data) => {
-                if (!data.accounts || data.accounts.length === 0) {
-                    throw new Error('No accounts returned from wallet, this should never happen, a bug on wallet side');
-                }
-                const accountId = data.accounts[0].accountId;
+                const accountId = data.accountId;
                 this.#connectedAccount = new ConnectedAccount(accountId, this);
-                const responseWalletUrl = walletUrl === INTEAR_NATIVE_WALLET_URL ? walletUrl : data.walletUrl;
+                const responseWalletUrl = walletUrl === data.useBridge ? INTEAR_NATIVE_WALLET_URL : data.walletUrl;
                 this.walletUrl = responseWalletUrl;
                 this.logoutBridgeUrl = logoutBridgeUrl;
                 const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
@@ -536,13 +530,10 @@ export class IntearWalletConnector {
                     if (!data.signedMessage) {
                         throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
                     }
-                    const signatureWithoutPrefix = data.signedMessage.signature.split(':')[1];
-                    const sigBytes = base58Decode(signatureWithoutPrefix);
-                    const signatureBase64 = base64Encode(sigBytes);
                     result.signedMessage = {
                         accountId: data.signedMessage.accountId,
                         publicKey: data.signedMessage.publicKey,
-                        signature: signatureBase64,
+                        signature: data.signedMessage.signature,
                         state: data.signedMessage.state
                     };
                 }

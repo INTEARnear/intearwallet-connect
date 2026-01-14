@@ -544,13 +544,10 @@ class ConnectedAccount {
             sendData: signMessageData,
             successMessageType: 'signed',
             onSuccess: (data) => {
-                const signatureWithoutPrefix = data.signature.signature.split(':')[1];
-                const signatureBytes = base58Decode(signatureWithoutPrefix);
-                const signatureBase64 = base64Encode(signatureBytes);
                 return {
                     accountId: data.signature.accountId,
                     publicKey: data.signature.publicKey,
-                    signature: signatureBase64,
+                    signature: data.signature.signature,
                     state: data.signature.state
                 };
             },
@@ -630,7 +627,7 @@ class ConnectedAccount {
             successMessageType: 'sent',
             onSuccess: (data) => {
                 return {
-                    outcomes: data.outcomes.map((map: Map<string, any>) => Object.fromEntries(map.entries()))
+                    outcomes: data.outcomes
                 };
             },
             isUserRejection: (msg) => msg === "User rejected the transactions"
@@ -721,7 +718,7 @@ export class IntearWalletConnector {
         const publicKey = `ed25519:${publicKeyBase58}`;
 
         const origin = window.location.origin;
-        let messagePayload: { origin: string; messageToSign?: string };
+        let messagePayload: { messageToSign?: string };
         if (nep413MessageToSign) {
             const nep413Payload = JSON.stringify({
                 message: nep413MessageToSign.message,
@@ -730,9 +727,9 @@ export class IntearWalletConnector {
                 callback_url: nep413MessageToSign.callbackUrl ?? null,
                 state: nep413MessageToSign.state ?? null
             });
-            messagePayload = { origin, messageToSign: nep413Payload };
+            messagePayload = { messageToSign: nep413Payload };
         } else {
-            messagePayload = { origin };
+            messagePayload = {};
         }
         const message = JSON.stringify(messagePayload);
 
@@ -759,7 +756,7 @@ export class IntearWalletConnector {
             nonce,
             message,
             signature,
-            version: 'V2',
+            version: 'V3',
             actualOrigin: origin
         };
 
@@ -771,12 +768,9 @@ export class IntearWalletConnector {
             sendData: signInData,
             successMessageType: 'connected',
             onSuccess: async (data) => {
-                if (!data.accounts || data.accounts.length === 0) {
-                    throw new Error('No accounts returned from wallet, this should never happen, a bug on wallet side');
-                }
-                const accountId = data.accounts[0].accountId;
+                const accountId = data.accountId;
                 this.#connectedAccount = new ConnectedAccount(accountId, this);
-                const responseWalletUrl = walletUrl === INTEAR_NATIVE_WALLET_URL ? walletUrl : data.walletUrl;
+                const responseWalletUrl = walletUrl === data.useBridge ? INTEAR_NATIVE_WALLET_URL : data.walletUrl;
                 this.walletUrl = responseWalletUrl;
                 this.logoutBridgeUrl = logoutBridgeUrl;
                 const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
@@ -791,13 +785,10 @@ export class IntearWalletConnector {
                     if (!data.signedMessage) {
                         throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
                     }
-                    const signatureWithoutPrefix = data.signedMessage.signature.split(':')[1];
-                    const sigBytes = base58Decode(signatureWithoutPrefix);
-                    const signatureBase64 = base64Encode(sigBytes);
                     result.signedMessage = {
                         accountId: data.signedMessage.accountId,
                         publicKey: data.signedMessage.publicKey,
-                        signature: signatureBase64,
+                        signature: data.signedMessage.signature,
                         state: data.signedMessage.state
                     };
                 }
@@ -927,18 +918,20 @@ export class LocalStorageStorage implements Storage {
 
 export default IntearWalletConnector;
 
-export interface CreateAccountAction {
+export type SelectorAction = LegacySelectorAction | NearAction;
+
+export interface LegacyCreateAccountAction {
     type: "CreateAccount";
 }
 
-export interface DeployContractAction {
+export interface LegacyDeployContractAction {
     type: "DeployContract";
     params: {
         code: number[];
     };
 }
 
-export interface FunctionCallAction {
+export interface LegacyFunctionCallAction {
     type: "FunctionCall";
     params: {
         methodName: string;
@@ -948,14 +941,14 @@ export interface FunctionCallAction {
     };
 }
 
-export interface TransferAction {
+export interface LegacyTransferAction {
     type: "Transfer";
     params: {
         deposit: string;
     };
 }
 
-export interface StakeAction {
+export interface LegacyStakeAction {
     type: "Stake";
     params: {
         stake: string;
@@ -971,7 +964,7 @@ export type AddKeyPermission =
         methodNames?: Array<string>;
     };
 
-export interface AddKeyAction {
+export interface LegacyAddKeyAction {
     type: "AddKey";
     params: {
         publicKey: string;
@@ -982,44 +975,118 @@ export interface AddKeyAction {
     };
 }
 
-export interface DeleteKeyAction {
+export interface LegacyDeleteKeyAction {
     type: "DeleteKey";
     params: {
         publicKey: string;
     };
 }
 
-export interface DeleteAccountAction {
+export interface LegacyDeleteAccountAction {
     type: "DeleteAccount";
     params: {
         beneficiaryId: string;
     };
 }
 
-export interface UseGlobalContractAction {
+export interface LegacyUseGlobalContractAction {
     type: "UseGlobalContract";
     params: { contractIdentifier: { accountId: string } | { codeHash: string } };
 }
 
-export interface DeployGlobalContractAction {
+export interface LegacyDeployGlobalContractAction {
     type: "DeployGlobalContract";
     params: { code: number[]; deployMode: "CodeHash" | "AccountId" };
 }
 
-export type Action =
-    | CreateAccountAction
-    | DeployContractAction
-    | FunctionCallAction
-    | TransferAction
-    | StakeAction
-    | AddKeyAction
-    | DeleteKeyAction
-    | DeleteAccountAction
-    | UseGlobalContractAction
-    | DeployGlobalContractAction;
+export type LegacySelectorAction =
+    | LegacyCreateAccountAction
+    | LegacyDeployContractAction
+    | LegacyFunctionCallAction
+    | LegacyTransferAction
+    | LegacyStakeAction
+    | LegacyAddKeyAction
+    | LegacyDeleteKeyAction
+    | LegacyDeleteAccountAction
+    | LegacyUseGlobalContractAction
+    | LegacyDeployGlobalContractAction;
+
+export type AccessKeyPermission =
+    | "FullAccess"
+    | {
+        FunctionCall: {
+            allowance: string | null;
+            receiver_id: string;
+            method_names: string[];
+        };
+    };
+
+export interface AddKeyAction {
+    public_key: string;
+    access_key: {
+        nonce: number;
+        permission: AccessKeyPermission;
+    };
+}
+
+export interface CreateAccountAction {}
+
+export interface DeleteAccountAction {
+    beneficiary_id: string;
+}
+
+export interface DeleteKeyAction {
+    public_key: string;
+}
+
+export interface DeployContractAction {
+    code: string;
+}
+
+export interface DeployGlobalContractAction {
+    code: string;
+    deploy_mode: "CodeHash" | "AccountId";
+}
+
+export type GlobalContractIdentifier =
+    | { CodeHash: string }
+    | { AccountId: string };
+
+export interface UseGlobalContractAction {
+    contract_identifier: GlobalContractIdentifier;
+}
+
+export interface FunctionCallAction {
+    method_name: string;
+    args: string;
+    gas: string | number;
+    deposit: string;
+}
+
+export interface StakeAction {
+    stake: string;
+    public_key: string;
+}
+
+export interface TransferAction {
+    deposit: string;
+}
+
+// Intentionally no delegate action
+export type NearAction =
+    | { CreateAccount: CreateAccountAction }
+    | { DeployContract: DeployContractAction }
+    | { FunctionCall: FunctionCallAction }
+    | { Transfer: TransferAction }
+    | { Stake: StakeAction }
+    | { AddKey: AddKeyAction }
+    | { DeleteKey: DeleteKeyAction }
+    | { DeleteAccount: DeleteAccountAction }
+    | { DeployGlobalContract: DeployGlobalContractAction }
+    | { UseGlobalContract: UseGlobalContractAction };
 
 export interface Transaction {
     signerId: string;
     receiverId: string;
-    actions: Array<Action>;
+    actions: Array<SelectorAction>;
 }
