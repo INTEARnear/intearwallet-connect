@@ -5,6 +5,17 @@
 export const INTEAR_NATIVE_WALLET_URL = "intear://" as const;
 
 /**
+ * Use a selector iframe to let the user choose which way to connect. This is the
+ * preferred way for most dapps, since the user can be using staging or native app,
+ * so you don't have to implement the selector yourself.
+ * @param walletUrl - Origin of the iframe (where the iframe .html is loaded from).
+ * @returns The valid walletUrl parameter that you can use in requestConnection call.
+ */
+export function useIframe(walletUrl: string = "https://wallet.intear.tech"): string {
+    return `iframe:${walletUrl}`;
+}
+
+/**
  * Decodes a base64url string to byte array
  * @param str - The base64 or base64url encoded string
  * @returns The decoded byte array
@@ -760,43 +771,127 @@ export class IntearWalletConnector {
             actualOrigin: origin
         };
 
-        return openWalletFlow<ConnectionResult>({
-            method: 'connect',
-            walletUrl,
-            logoutBridgeUrl,
-            sendMessageType: 'signIn',
-            sendData: signInData,
-            successMessageType: 'connected',
-            onSuccess: async (data) => {
-                const accountId = data.accountId;
-                this.#connectedAccount = new ConnectedAccount(accountId, this);
-                const responseWalletUrl = walletUrl === data.useBridge ? INTEAR_NATIVE_WALLET_URL : data.walletUrl;
-                this.walletUrl = responseWalletUrl;
-                this.logoutBridgeUrl = logoutBridgeUrl;
-                const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
-                await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
-                await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
-                await this.storage.set(STORAGE_KEY_LOGOUT_BRIDGE_URL, logoutBridgeUrl);
-                await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
+        if (walletUrl.startsWith("iframe:")) {
+            const iframeOriginUrl = walletUrl.substring("iframe:".length);
+            const iframe = document.createElement("iframe");
+            iframe.src = `${iframeOriginUrl}/wallet-connector-iframe.html`;
+            iframe.style.position = "fixed";
+            iframe.style.inset = "0";
+            iframe.style.width = "100vw";
+            iframe.style.height = "100vh";
+            iframe.style.border = "none";
+            iframe.style.zIndex = "100000";
+            document.body.appendChild(iframe);
 
-                const result: ConnectionResult = { account: this.#connectedAccount };
+            return new Promise((resolve, reject) => {
+                const listener = async (event: MessageEvent) => {
+                    switch (event.data.type) {
+                        case "ready":
+                            iframe.contentWindow?.postMessage(
+                                {
+                                    type: "signIn",
+                                    data: signInData,
+                                },
+                                iframeOriginUrl
+                            );
+                            break;
+                        case "connected":
+                            const accountId = event.data.accountId;
+                            this.#connectedAccount = new ConnectedAccount(accountId, this);
+                            const responseWalletUrl = walletUrl === event.data.useBridge ? INTEAR_NATIVE_WALLET_URL : event.data.walletUrl;
+                            this.walletUrl = responseWalletUrl;
+                            this.logoutBridgeUrl = logoutBridgeUrl;
+                            const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                            await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
+                            await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
+                            await this.storage.set(STORAGE_KEY_LOGOUT_BRIDGE_URL, logoutBridgeUrl);
+                            await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
 
-                if (nep413MessageToSign) {
-                    if (!data.signedMessage) {
-                        throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
+                            const result: ConnectionResult = { account: this.#connectedAccount };
+
+                            if (nep413MessageToSign) {
+                                if (!event.data.signedMessage) {
+                                    throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
+                                }
+                                result.signedMessage = {
+                                    accountId: event.data.signedMessage.accountId,
+                                    publicKey: event.data.signedMessage.publicKey,
+                                    signature: event.data.signedMessage.signature,
+                                    state: event.data.signedMessage.state
+                                };
+                            }
+
+                            resolve(result);
+                            iframe.contentWindow?.postMessage(
+                                {
+                                    type: "close",
+                                },
+                                iframeOriginUrl
+                            );
+                            break;
+                        case "error":
+                            iframe.contentWindow?.postMessage(
+                                {
+                                    type: "close",
+                                    message: event.data.message,
+                                },
+                                iframeOriginUrl
+                            );
+                            break;
+                        case "close":
+                            iframe.remove();
+                            if (event.data.message) {
+                                if (event.data.message == "User closed the modal" || event.data.message == "User rejected the connection") {
+                                    resolve(null)
+                                } else {
+                                    reject(new Error(event.data.message));
+                                }
+                            }
+                            window.removeEventListener("message", listener);
+                            break;
                     }
-                    result.signedMessage = {
-                        accountId: data.signedMessage.accountId,
-                        publicKey: data.signedMessage.publicKey,
-                        signature: data.signedMessage.signature,
-                        state: data.signedMessage.state
-                    };
-                }
+                };
+                window.addEventListener("message", listener);
+            });
+        } else {
+            return openWalletFlow<ConnectionResult>({
+                method: 'connect',
+                walletUrl,
+                logoutBridgeUrl,
+                sendMessageType: 'signIn',
+                sendData: signInData,
+                successMessageType: 'connected',
+                onSuccess: async (data) => {
+                    const accountId = data.accountId;
+                    this.#connectedAccount = new ConnectedAccount(accountId, this);
+                    const responseWalletUrl = walletUrl === data.useBridge ? INTEAR_NATIVE_WALLET_URL : data.walletUrl;
+                    this.walletUrl = responseWalletUrl;
+                    this.logoutBridgeUrl = logoutBridgeUrl;
+                    const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                    await this.storage.set(STORAGE_KEY_APP_PRIVATE_KEY, privateKeyJwk);
+                    await this.storage.set(STORAGE_KEY_WALLET_URL, responseWalletUrl);
+                    await this.storage.set(STORAGE_KEY_LOGOUT_BRIDGE_URL, logoutBridgeUrl);
+                    await this.storage.set(STORAGE_KEY_ACCOUNT_ID, accountId);
 
-                return result;
-            },
-            isUserRejection: (msg) => msg === "User rejected the connection"
-        });
+                    const result: ConnectionResult = { account: this.#connectedAccount };
+
+                    if (nep413MessageToSign) {
+                        if (!data.signedMessage) {
+                            throw new Error('No signed message returned from wallet, this should never happen, a bug on wallet side');
+                        }
+                        result.signedMessage = {
+                            accountId: data.signedMessage.accountId,
+                            publicKey: data.signedMessage.publicKey,
+                            signature: data.signedMessage.signature,
+                            state: data.signedMessage.state
+                        };
+                    }
+
+                    return result;
+                },
+                isUserRejection: (msg) => msg === "User rejected the connection"
+            });
+        }
     }
 
     /**
@@ -1029,7 +1124,7 @@ export interface AddKeyAction {
     };
 }
 
-export interface CreateAccountAction {}
+export interface CreateAccountAction { }
 
 export interface DeleteAccountAction {
     beneficiary_id: string;

@@ -124,6 +124,16 @@
       box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
     }
 
+    #connectIframeBtn {
+      background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+      color: #333;
+    }
+
+    #connectIframeBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(168, 237, 234, 0.4);
+    }
+
     #signMessageBtn {
       background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
       color: white;
@@ -226,6 +236,7 @@
       <button id="connectBtn">Connect</button>
       <button id="connectSignBtn">Connect + Sign</button>
       <button id="connectNativeBtn">Connect via App</button>
+      <button id="connectIframeBtn">Connect via Iframe</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="sendTxBtn" disabled>Send Transaction</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
@@ -246,13 +257,14 @@
   </div>
 
   <script type="module">
-    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL } from './index.js';
+    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL, useIframe } from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
     const connectSignBtn = document.getElementById('connectSignBtn');
     const connectNativeBtn = document.getElementById('connectNativeBtn');
+    const connectIframeBtn = document.getElementById('connectIframeBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
     const sendTxBtn = document.getElementById('sendTxBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
@@ -274,6 +286,7 @@
         connectBtn.disabled = true;
         connectSignBtn.disabled = true;
         connectNativeBtn.disabled = true;
+        connectIframeBtn.disabled = true;
         signMessageBtn.disabled = false;
         sendTxBtn.disabled = false;
         disconnectBtn.disabled = false;
@@ -282,6 +295,7 @@
         connectBtn.disabled = false;
         connectSignBtn.disabled = false;
         connectNativeBtn.disabled = false;
+        connectIframeBtn.disabled = false;
         signMessageBtn.disabled = true;
         sendTxBtn.disabled = true;
         disconnectBtn.disabled = true;
@@ -369,6 +383,27 @@
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         connectNativeBtn.textContent = 'Connect via App';
+      }
+    });
+
+    connectIframeBtn.addEventListener('click', async () => {
+      try {
+        connectIframeBtn.textContent = 'Connecting...';
+        const result = await connector.requestConnection({
+          walletUrl: useIframe("https://staging.wallet.intear.tech")
+        });
+        console.log('result:', result);
+        connectIframeBtn.textContent = 'Connect via Iframe';
+
+        if (result === null) {
+          setStatus('Connection rejected by user', 'rejected');
+        } else {
+          updateUI();
+        }
+      } catch (error) {
+        console.error('Connection failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        connectIframeBtn.textContent = 'Connect via Iframe';
       }
     });
 
