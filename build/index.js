@@ -10,7 +10,7 @@ export const INTEAR_NATIVE_WALLET_URL = "intear://";
  * @param walletUrl - Origin of the iframe (where the iframe .html is loaded from).
  * @returns The valid walletUrl parameter that you can use in requestConnection call.
  */
-export function useIframe(walletUrl = "https://wallet.intear.tech") {
+export function iframe(walletUrl = "https://wallet.intear.tech") {
     return `iframe:${walletUrl}`;
 }
 /**
@@ -471,7 +471,7 @@ export class IntearWalletConnector {
         if (this.#connectedAccount !== null) {
             throw new Error('Already connected');
         }
-        const { networkId = 'mainnet', walletUrl = 'https://wallet.intear.tech', logoutBridgeUrl = "wss://logout-bridge-service.intear.tech", messageToSign: nep413MessageToSign } = options;
+        const { networkId = 'mainnet', walletUrl = 'iframe:https://wallet.intear.tech', logoutBridgeUrl = "wss://logout-bridge-service.intear.tech", messageToSign: nep413MessageToSign } = options;
         if (nep413MessageToSign && nep413MessageToSign.nonce.length !== 32) {
             throw new Error('Nonce must be 32 bytes');
         }

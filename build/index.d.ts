@@ -10,7 +10,7 @@ export declare const INTEAR_NATIVE_WALLET_URL: "intear://";
  * @param walletUrl - Origin of the iframe (where the iframe .html is loaded from).
  * @returns The valid walletUrl parameter that you can use in requestConnection call.
  */
-export declare function useIframe(walletUrl?: string): string;
+export declare function iframe(walletUrl?: string): string;
 /**
  * Storage - A storage interface that is used by the connector to store its internal data
  */
