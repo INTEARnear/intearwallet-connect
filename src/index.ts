@@ -11,7 +11,7 @@ export const INTEAR_NATIVE_WALLET_URL = "intear://" as const;
  * @param walletUrl - Origin of the iframe (where the iframe .html is loaded from).
  * @returns The valid walletUrl parameter that you can use in requestConnection call.
  */
-export function useIframe(walletUrl: string = "https://wallet.intear.tech"): string {
+export function iframe(walletUrl: string = "https://wallet.intear.tech"): string {
     return `iframe:${walletUrl}`;
 }
 
@@ -706,7 +706,7 @@ export class IntearWalletConnector {
 
         const {
             networkId = 'mainnet',
-            walletUrl = 'https://wallet.intear.tech',
+            walletUrl = 'iframe:https://wallet.intear.tech',
             logoutBridgeUrl = "wss://logout-bridge-service.intear.tech",
             messageToSign: nep413MessageToSign
         } = options;
