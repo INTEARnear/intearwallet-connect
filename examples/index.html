@@ -257,7 +257,7 @@
   </div>
 
   <script type="module">
-    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL, useIframe } from './index.js';
+    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL, iframe } from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
@@ -390,7 +390,7 @@
       try {
         connectIframeBtn.textContent = 'Connecting...';
         const result = await connector.requestConnection({
-          walletUrl: useIframe("https://staging.wallet.intear.tech")
+          walletUrl: iframe("https://staging.wallet.intear.tech")
         });
         console.log('result:', result);
         connectIframeBtn.textContent = 'Connect via Iframe';
