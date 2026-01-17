@@ -120,6 +120,12 @@ export interface ConnectionOptions {
      * Optional NEP-413 message to sign during connection
      */
     messageToSign?: Nep413Payload;
+    /**
+     * The relayer ID to use for new account onboarding, which allows users to create
+     * branded subaccounts, like user123.intears.near. You can get your relayer ID on
+     * https://rainy.intea.rs
+     */
+    relayerId?: string;
 }
 /**
  * Result of a successful connection to the Intear Wallet

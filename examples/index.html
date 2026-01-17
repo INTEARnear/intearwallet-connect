@@ -308,7 +308,8 @@
       try {
         connectBtn.textContent = 'Connecting...';
         const result = await connector.requestConnection({
-          walletUrl: "https://staging.wallet.intear.tech"
+          walletUrl: "http://staging.wallet.intear.tech",
+          relayerId: "therealtears",
         });
         console.log('result:', result);
         connectBtn.textContent = 'Connect';

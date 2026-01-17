@@ -440,6 +440,12 @@ export interface ConnectionOptions {
      * Optional NEP-413 message to sign during connection
      */
     messageToSign?: Nep413Payload;
+    /**
+     * The relayer ID to use for new account onboarding, which allows users to create
+     * branded subaccounts, like user123.intears.near. You can get your relayer ID on
+     * https://rainy.intea.rs
+     */
+    relayerId?: string;
 }
 
 /**
@@ -708,7 +714,8 @@ export class IntearWalletConnector {
             networkId = 'mainnet',
             walletUrl = 'iframe:https://wallet.intear.tech',
             logoutBridgeUrl = "wss://logout-bridge-service.intear.tech",
-            messageToSign: nep413MessageToSign
+            messageToSign: nep413MessageToSign,
+            relayerId = null,
         } = options;
 
         if (nep413MessageToSign && nep413MessageToSign.nonce.length !== 32) {
@@ -768,7 +775,8 @@ export class IntearWalletConnector {
             message,
             signature,
             version: 'V3',
-            actualOrigin: origin
+            actualOrigin: origin,
+            relayerId,
         };
 
         if (walletUrl.startsWith("iframe:")) {

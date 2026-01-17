@@ -471,7 +471,7 @@ export class IntearWalletConnector {
         if (this.#connectedAccount !== null) {
             throw new Error('Already connected');
         }
-        const { networkId = 'mainnet', walletUrl = 'iframe:https://wallet.intear.tech', logoutBridgeUrl = "wss://logout-bridge-service.intear.tech", messageToSign: nep413MessageToSign } = options;
+        const { networkId = 'mainnet', walletUrl = 'iframe:https://wallet.intear.tech', logoutBridgeUrl = "wss://logout-bridge-service.intear.tech", messageToSign: nep413MessageToSign, relayerId = null, } = options;
         if (nep413MessageToSign && nep413MessageToSign.nonce.length !== 32) {
             throw new Error('Nonce must be 32 bytes');
         }
@@ -515,7 +515,8 @@ export class IntearWalletConnector {
             message,
             signature,
             version: 'V3',
-            actualOrigin: origin
+            actualOrigin: origin,
+            relayerId,
         };
         if (walletUrl.startsWith("iframe:")) {
             const iframeOriginUrl = walletUrl.substring("iframe:".length);
