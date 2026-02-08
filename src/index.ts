@@ -143,7 +143,7 @@ interface WalletFlowConfig<TResponse> {
     /** Message type indicating success */
     successMessageType: string;
     /** Transform successful response data (can be async) */
-    onSuccess: (data: any) => TResponse | Promise<TResponse>;
+    onSuccess: (data: any) => Promise<TResponse>;
     /** Optional: handle user rejection errors, return value to resolve with */
     isUserRejection?: (errorMessage: string) => boolean;
 }
@@ -560,7 +560,7 @@ class ConnectedAccount {
             sendMessageType: 'signMessage',
             sendData: signMessageData,
             successMessageType: 'signed',
-            onSuccess: (data) => {
+            onSuccess: async (data) => {
                 return {
                     accountId: data.signature.accountId,
                     publicKey: data.signature.publicKey,
@@ -575,10 +575,10 @@ class ConnectedAccount {
     /**
      * Sends transactions to be signed and executed via wallet popup
      * @param transactions - Array of transactions to send. Each transaction specifies signerId, receiverId, and actions.
-     * @returns A promise that resolves with the execution outcomes, or null if user rejected
+     * @returns A promise that resolves with the execution outcomes (or signed delegate actions if onlySignDelegate is true), or null if user rejected
      * @throws Error if not connected or sending fails
      */
-    async sendTransactions(transactions: Transaction[]): Promise<SendTransactionsResult | null> {
+    async sendTransactions(transactions: Transaction[], onlySignDelegate: boolean = false): Promise<SendTransactionsResult | SignDelegateActionsResult | null> {
         if (this.disconnected) {
             throw new Error('Account is disconnected');
         }
@@ -629,23 +629,32 @@ class ConnectedAccount {
             publicKey,
             nonce,
             signature,
-            transactions: transactionsJson
+            transactions: transactionsJson,
+            mode: onlySignDelegate ? 'SignDelegateActions' : 'Send'
         };
 
         const walletUrl = this.#connector.walletUrl;
         const logoutBridgeUrl = this.#connector.logoutBridgeUrl;
 
-        return openWalletFlow<SendTransactionsResult>({
+        return openWalletFlow<SendTransactionsResult | SignDelegateActionsResult>({
             method: 'send-transactions',
             walletUrl,
             logoutBridgeUrl,
             sendMessageType: 'signAndSendTransactions',
             sendData: sendTransactionsData,
             successMessageType: 'sent',
-            onSuccess: (data) => {
-                return {
-                    outcomes: data.outcomes
-                };
+            onSuccess: async (data) => {
+                if (data.outcomes) {
+                    return {
+                        outcomes: data.outcomes
+                    } as SendTransactionsResult;
+                }
+                if (data.signedDelegateActions) {
+                    return {
+                        signedDelegateActions: data.signedDelegateActions
+                    } as SignDelegateActionsResult;
+                }
+                throw new Error('No outcomes or signedDelegateActions returned from wallet, this should never happen, a bug on wallet side');
             },
             isUserRejection: (msg) => msg === "User rejected the transactions"
         });
@@ -1021,7 +1030,7 @@ export class LocalStorageStorage implements Storage {
 
 export default IntearWalletConnector;
 
-export type SelectorAction = LegacySelectorAction | NearAction;
+export type Action = LegacySelectorAction | NonDelegateAction;
 
 export interface LegacyCreateAccountAction {
     type: "CreateAccount";
@@ -1175,7 +1184,6 @@ export interface TransferAction {
     deposit: string;
 }
 
-// Intentionally no delegate action
 export type NearAction =
     | { CreateAccount: CreateAccountAction }
     | { DeployContract: DeployContractAction }
@@ -1186,10 +1194,40 @@ export type NearAction =
     | { DeleteKey: DeleteKeyAction }
     | { DeleteAccount: DeleteAccountAction }
     | { DeployGlobalContract: DeployGlobalContractAction }
-    | { UseGlobalContract: UseGlobalContractAction };
+    | { UseGlobalContract: UseGlobalContractAction }
+    | { Delegate: DelegateAction };
+
+export type NonDelegateAction = Exclude<NearAction, { Delegate: DelegateAction }>;
+
+export interface SignedDelegateAction {
+    delegate_action: DelegateAction;
+    // the format is ed25519:<base58>
+    signature: string;
+}
+
+export interface DelegateAction {
+    sender_id: string;
+    receiver_id: string;
+    actions: Array<NonDelegateAction>;
+    nonce: number;
+    max_block_height: number;
+    public_key: string;
+}
 
 export interface Transaction {
     signerId: string;
     receiverId: string;
-    actions: Array<SelectorAction>;
+    actions: Array<Action>;
+}
+
+/**
+ * Result of signing delegate actions in the wallet.
+ * Contains the signed delegate actions, ready to send to the RPC.
+ */
+export interface SignDelegateActionsResult {
+    /**
+     * Array of execution outcomes for each transaction, in the same order as the transactions were sent.
+     * Each outcome is the FinalExecutionOutcomeViewEnum as returned by NEAR RPC.
+     */
+    signedDelegateActions: SignedDelegateAction[];
 }

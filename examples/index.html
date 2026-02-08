@@ -154,6 +154,16 @@
       box-shadow: 0 4px 12px rgba(247, 151, 30, 0.4);
     }
 
+    #signDelegateBtn {
+      background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+      color: white;
+    }
+
+    #signDelegateBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -239,6 +249,7 @@
       <button id="connectIframeBtn">Connect via Iframe</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="sendTxBtn" disabled>Send Transaction</button>
+      <button id="signDelegateBtn" disabled>Sign Delegate Actions</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
     <div id="signatureResult" class="signature-result">
@@ -267,6 +278,7 @@
     const connectIframeBtn = document.getElementById('connectIframeBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
     const sendTxBtn = document.getElementById('sendTxBtn');
+    const signDelegateBtn = document.getElementById('signDelegateBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const signatureResult = document.getElementById('signatureResult');
     const sigAccountId = document.getElementById('sigAccountId');
@@ -289,6 +301,7 @@
         connectIframeBtn.disabled = true;
         signMessageBtn.disabled = false;
         sendTxBtn.disabled = false;
+        signDelegateBtn.disabled = false;
         disconnectBtn.disabled = false;
       } else {
         setStatus('Not connected');
@@ -298,6 +311,7 @@
         connectIframeBtn.disabled = false;
         signMessageBtn.disabled = true;
         sendTxBtn.disabled = true;
+        signDelegateBtn.disabled = true;
         disconnectBtn.disabled = true;
         signatureResult.classList.remove('visible');
         txResult.classList.remove('visible');
@@ -476,6 +490,43 @@
         console.error('Transaction failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         sendTxBtn.textContent = 'Send Transaction';
+      }
+    });
+
+    signDelegateBtn.addEventListener('click', async () => {
+      try {
+        signDelegateBtn.textContent = 'Signing...';
+
+        const accountId = connector.connectedAccount.accountId;
+        const result = await connector.connectedAccount.sendTransactions([
+          {
+            signerId: accountId,
+            receiverId: 'intear.near',
+            actions: [
+              {
+                type: 'Transfer',
+                params: {
+                  deposit: '1' + '0'.repeat(24 - 2) // 0.01 NEAR
+                }
+              }
+            ]
+          }
+        ], true);
+
+        signDelegateBtn.textContent = 'Sign Delegate Actions';
+
+        if (result === null) {
+          setStatus('Delegate action signing rejected by user', 'rejected');
+          txResult.classList.remove('visible');
+        } else {
+          setStatus(`Signed ${result.signedDelegateActions.length} delegate action(s)`, 'connected');
+          txOutcomes.textContent = JSON.stringify(result.signedDelegateActions, null, 2);
+          txResult.classList.add('visible');
+        }
+      } catch (error) {
+        console.error('Delegate action signing failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        signDelegateBtn.textContent = 'Sign Delegate Actions';
       }
     });
 

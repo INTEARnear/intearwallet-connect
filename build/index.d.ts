@@ -165,10 +165,10 @@ declare class ConnectedAccount {
     /**
      * Sends transactions to be signed and executed via wallet popup
      * @param transactions - Array of transactions to send. Each transaction specifies signerId, receiverId, and actions.
-     * @returns A promise that resolves with the execution outcomes, or null if user rejected
+     * @returns A promise that resolves with the execution outcomes (or signed delegate actions if onlySignDelegate is true), or null if user rejected
      * @throws Error if not connected or sending fails
      */
-    sendTransactions(transactions: Transaction[]): Promise<SendTransactionsResult | null>;
+    sendTransactions(transactions: Transaction[], onlySignDelegate?: boolean): Promise<SendTransactionsResult | SignDelegateActionsResult | null>;
 }
 /**
  * IntearWalletConnector - A lightweight connector for Intear Wallet
@@ -250,7 +250,7 @@ export declare class LocalStorageStorage implements Storage {
     remove(key: string): Promise<any | null>;
 }
 export default IntearWalletConnector;
-export type SelectorAction = LegacySelectorAction | NearAction;
+export type Action = LegacySelectorAction | NonDelegateAction;
 export interface LegacyCreateAccountAction {
     type: "CreateAccount";
 }
@@ -397,9 +397,37 @@ export type NearAction = {
     DeployGlobalContract: DeployGlobalContractAction;
 } | {
     UseGlobalContract: UseGlobalContractAction;
+} | {
+    Delegate: DelegateAction;
 };
+export type NonDelegateAction = Exclude<NearAction, {
+    Delegate: DelegateAction;
+}>;
+export interface SignedDelegateAction {
+    delegate_action: DelegateAction;
+    signature: string;
+}
+export interface DelegateAction {
+    sender_id: string;
+    receiver_id: string;
+    actions: Array<NonDelegateAction>;
+    nonce: number;
+    max_block_height: number;
+    public_key: string;
+}
 export interface Transaction {
     signerId: string;
     receiverId: string;
-    actions: Array<SelectorAction>;
+    actions: Array<Action>;
+}
+/**
+ * Result of signing delegate actions in the wallet.
+ * Contains the signed delegate actions, ready to send to the RPC.
+ */
+export interface SignDelegateActionsResult {
+    /**
+     * Array of execution outcomes for each transaction, in the same order as the transactions were sent.
+     * Each outcome is the FinalExecutionOutcomeViewEnum as returned by NEAR RPC.
+     */
+    signedDelegateActions: SignedDelegateAction[];
 }
