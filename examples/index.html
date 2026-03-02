@@ -164,6 +164,16 @@
       box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
     }
 
+    #sendTwoTxBtn {
+      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+      color: white;
+    }
+
+    #sendTwoTxBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(250, 112, 154, 0.4);
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -249,6 +259,7 @@
       <button id="connectIframeBtn">Connect via Iframe</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
       <button id="sendTxBtn" disabled>Send Transaction</button>
+      <button id="sendTwoTxBtn" disabled>Send 2 Transactions</button>
       <button id="signDelegateBtn" disabled>Sign Delegate Actions</button>
       <button id="disconnectBtn" disabled>Disconnect</button>
     </div>
@@ -278,6 +289,7 @@
     const connectIframeBtn = document.getElementById('connectIframeBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
     const sendTxBtn = document.getElementById('sendTxBtn');
+    const sendTwoTxBtn = document.getElementById('sendTwoTxBtn');
     const signDelegateBtn = document.getElementById('signDelegateBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
     const signatureResult = document.getElementById('signatureResult');
@@ -301,6 +313,7 @@
         connectIframeBtn.disabled = true;
         signMessageBtn.disabled = false;
         sendTxBtn.disabled = false;
+        sendTwoTxBtn.disabled = false;
         signDelegateBtn.disabled = false;
         disconnectBtn.disabled = false;
       } else {
@@ -311,6 +324,7 @@
         connectIframeBtn.disabled = false;
         signMessageBtn.disabled = true;
         sendTxBtn.disabled = true;
+        sendTwoTxBtn.disabled = true;
         signDelegateBtn.disabled = true;
         disconnectBtn.disabled = true;
         signatureResult.classList.remove('visible');
@@ -490,6 +504,55 @@
         console.error('Transaction failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         sendTxBtn.textContent = 'Send Transaction';
+      }
+    });
+
+    sendTwoTxBtn.addEventListener('click', async () => {
+      try {
+        sendTwoTxBtn.textContent = 'Sending...';
+
+        const accountId = connector.connectedAccount.accountId;
+        const result = await connector.connectedAccount.sendTransactions([
+          {
+            signerId: accountId,
+            receiverId: 'intear.near',
+            actions: [
+              {
+                type: 'Transfer',
+                params: {
+                  deposit: '1' + '0'.repeat(24 - 2) // 0.01 NEAR
+                }
+              }
+            ]
+          },
+          {
+            signerId: accountId,
+            receiverId: 'intear.near',
+            actions: [
+              {
+                type: 'Transfer',
+                params: {
+                  deposit: '1' + '0'.repeat(24 - 2) // 0.01 NEAR
+                }
+              }
+            ]
+          }
+        ]);
+
+        sendTwoTxBtn.textContent = 'Send 2 Transactions';
+
+        if (result === null) {
+          setStatus('Transactions rejected by user', 'rejected');
+          txResult.classList.remove('visible');
+        } else {
+          setStatus(`Transactions sent! Outcomes: ${result.outcomes.length}`, 'connected');
+          txOutcomes.textContent = JSON.stringify(result.outcomes, null, 2);
+          txResult.classList.add('visible');
+        }
+      } catch (error) {
+        console.error('Transactions failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        sendTwoTxBtn.textContent = 'Send 2 Transactions';
       }
     });
 
