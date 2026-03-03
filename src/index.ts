@@ -509,9 +509,9 @@ export interface ConnectionOptions {
          */
         methodNames: "any" | [string, ...string[]];
         /**
-         * The gas allowance for the function call key, in yoctoNEAR.
+         * The gas allowance for the function call key, in yoctoNEAR. Default is 0.25 NEAR.
          */
-        gasAllowance: "unlimited" | string;
+        gasAllowance?: "unlimited" | string;
     }
 }
 
@@ -856,9 +856,9 @@ export class IntearWalletConnector {
             signature,
             version: "V3",
             relayerId,
-            contractId: functionCallKey ? functionCallKey.contractId : undefined,
+            contractId: functionCallKey?.contractId,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
-            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
+            gasAllowance: functionCallKey?.gasAllowance,
         } : {
             publicKey,
             networkId,
@@ -868,9 +868,9 @@ export class IntearWalletConnector {
             version: "V3",
             actualOrigin: window.location.origin,
             relayerId,
-            contractId: functionCallKey ? functionCallKey.contractId : undefined,
+            contractId: functionCallKey?.contractId,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
-            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
+            gasAllowance: functionCallKey?.gasAllowance,
         };
 
         if (walletUrl.startsWith("iframe:")) {

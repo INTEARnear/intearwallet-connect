@@ -167,9 +167,9 @@ export interface ConnectionOptions {
          */
         methodNames: "any" | [string, ...string[]];
         /**
-         * The gas allowance for the function call key, in yoctoNEAR.
+         * The gas allowance for the function call key, in yoctoNEAR. Default is 0.25 NEAR.
          */
-        gasAllowance: "unlimited" | string;
+        gasAllowance?: "unlimited" | string;
     };
 }
 /**

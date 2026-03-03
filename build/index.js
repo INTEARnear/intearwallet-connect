@@ -536,9 +536,9 @@ class IntearWalletConnector {
             version: "V3",
             actualOrigin: window.location.origin,
             relayerId,
-            contractId: functionCallKey ? functionCallKey.contractId : undefined,
+            contractId: functionCallKey?.contractId,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
-            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
+            gasAllowance: functionCallKey?.gasAllowance,
         };
         if (walletUrl.startsWith("iframe:")) {
             const iframeOriginUrl = walletUrl.substring("iframe:".length);
