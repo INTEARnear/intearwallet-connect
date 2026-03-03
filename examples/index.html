@@ -265,7 +265,7 @@
     <div class="button-group">
       <button id="connectBtn">Connect</button>
       <button id="connectSignBtn">Connect + Sign</button>
-      <button id="connectSignAddKeyBtn">Sign in + Add Key</button>
+      <button id="connectSignAddKeyBtn">Connect + Add Key</button>
       <button id="connectNativeBtn">Connect via App</button>
       <button id="connectIframeBtn">Connect via Iframe</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
@@ -426,7 +426,7 @@
             methodNames: ['test_method'],
             gasAllowance: '1' + '0'.repeat(24), // 1 NEAR
           },
-          walletUrl: "https://wallet.intear.tech",
+          walletUrl: iframe(),
         });
         console.log('result:', result);
         connectSignAddKeyBtn.textContent = 'Connect + Add Key';
@@ -446,7 +446,7 @@
       } catch (error) {
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
-        connectSignAddKeyBtn.textContent = 'Sign in + Add Key';
+        connectSignAddKeyBtn.textContent = 'Connect + Add Key';
       }
     });
 

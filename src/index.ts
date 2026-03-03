@@ -858,7 +858,7 @@ export class IntearWalletConnector {
             relayerId,
             contractId: functionCallKey?.contractId,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
-            gasAllowance: functionCallKey?.gasAllowance,
+            gasAllowance: functionCallKey ? (functionCallKey.gasAllowance === "unlimited" ? "Unlimited" : { Amount: functionCallKey.gasAllowance }) : undefined,
         } : {
             publicKey,
             networkId,
@@ -870,7 +870,7 @@ export class IntearWalletConnector {
             relayerId,
             contractId: functionCallKey?.contractId,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
-            gasAllowance: functionCallKey?.gasAllowance,
+            gasAllowance: functionCallKey ? (functionCallKey.gasAllowance === "unlimited" ? "Unlimited" : { Amount: functionCallKey.gasAllowance }) : undefined,
         };
 
         if (walletUrl.startsWith("iframe:")) {
