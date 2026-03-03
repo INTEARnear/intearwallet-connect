@@ -423,7 +423,8 @@
           functionCallKey: {
             publicKey: fcPublicKey,
             contractId: 'intear.near',
-            methodNames: ['test_method']
+            methodNames: ['test_method'],
+            gasAllowance: '1' + '0'.repeat(24), // 1 NEAR
           },
           walletUrl: "https://wallet.intear.tech",
         });

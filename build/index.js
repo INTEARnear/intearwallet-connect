@@ -538,6 +538,7 @@ class IntearWalletConnector {
             relayerId,
             contractId: functionCallKey ? functionCallKey.contractId : undefined,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
+            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
         };
         if (walletUrl.startsWith("iframe:")) {
             const iframeOriginUrl = walletUrl.substring("iframe:".length);

@@ -496,9 +496,22 @@ export interface ConnectionOptions {
      * Request adding a function call key when connecting to the account.
      */
     functionCallKey?: {
+        /**
+         * The public key to add, in ed25519:... format
+         */
         publicKey: string;
+        /**
+         * The contract ID that the function call key can all.
+         */
         contractId: string;
-        methodNames: [string, ...string[]] | "any";
+        /**
+         * The method names that the function call key can call.
+         */
+        methodNames: "any" | [string, ...string[]];
+        /**
+         * The gas allowance for the function call key, in yoctoNEAR.
+         */
+        gasAllowance: "unlimited" | string;
     }
 }
 
@@ -845,6 +858,7 @@ export class IntearWalletConnector {
             relayerId,
             contractId: functionCallKey ? functionCallKey.contractId : undefined,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
+            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
         } : {
             publicKey,
             networkId,
@@ -856,6 +870,7 @@ export class IntearWalletConnector {
             relayerId,
             contractId: functionCallKey ? functionCallKey.contractId : undefined,
             methodNames: functionCallKey ? (functionCallKey.methodNames === "any" ? undefined : functionCallKey.methodNames) : undefined,
+            gasAllowance: functionCallKey ? functionCallKey.gasAllowance : undefined,
         };
 
         if (walletUrl.startsWith("iframe:")) {
