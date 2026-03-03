@@ -114,6 +114,16 @@
       box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
     }
 
+    #connectSignAddKeyBtn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    #connectSignAddKeyBtn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
     #connectNativeBtn {
       background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
       color: white;
@@ -255,6 +265,7 @@
     <div class="button-group">
       <button id="connectBtn">Connect</button>
       <button id="connectSignBtn">Connect + Sign</button>
+      <button id="connectSignAddKeyBtn">Sign in + Add Key</button>
       <button id="connectNativeBtn">Connect via App</button>
       <button id="connectIframeBtn">Connect via Iframe</button>
       <button id="signMessageBtn" disabled>Sign Message</button>
@@ -279,12 +290,13 @@
   </div>
 
   <script type="module">
-    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL, iframe } from './index.js';
+    import { IntearWalletConnector, LocalStorageStorage, INTEAR_NATIVE_WALLET_URL, iframe, base58Encode } from './index.js';
 
     const connector = await IntearWalletConnector.loadFrom(new LocalStorageStorage("intearwallet-connect-example"));
     const statusEl = document.getElementById('status');
     const connectBtn = document.getElementById('connectBtn');
     const connectSignBtn = document.getElementById('connectSignBtn');
+    const connectSignAddKeyBtn = document.getElementById('connectSignAddKeyBtn');
     const connectNativeBtn = document.getElementById('connectNativeBtn');
     const connectIframeBtn = document.getElementById('connectIframeBtn');
     const signMessageBtn = document.getElementById('signMessageBtn');
@@ -309,6 +321,7 @@
         setStatus(`Connected: ${connector.connectedAccount.accountId}`, 'connected');
         connectBtn.disabled = true;
         connectSignBtn.disabled = true;
+        connectSignAddKeyBtn.disabled = true;
         connectNativeBtn.disabled = true;
         connectIframeBtn.disabled = true;
         signMessageBtn.disabled = false;
@@ -320,6 +333,7 @@
         setStatus('Not connected');
         connectBtn.disabled = false;
         connectSignBtn.disabled = false;
+        connectSignAddKeyBtn.disabled = false;
         connectNativeBtn.disabled = false;
         connectIframeBtn.disabled = false;
         signMessageBtn.disabled = true;
@@ -336,7 +350,7 @@
       try {
         connectBtn.textContent = 'Connecting...';
         const result = await connector.requestConnection({
-          walletUrl: "http://staging.wallet.intear.tech",
+          walletUrl: "https://wallet.intear.tech",
           relayerId: "therealtears",
         });
         console.log('result:', result);
@@ -370,7 +384,7 @@
             callbackUrl: null,
             state: null
           },
-          walletUrl: "https://staging.wallet.intear.tech"
+          walletUrl: "https://wallet.intear.tech"
         });
         console.log('result:', result);
         connectSignBtn.textContent = 'Connect + Sign';
@@ -391,6 +405,47 @@
         console.error('Connection failed:', error);
         setStatus(`Error: ${error.message}`, 'error');
         connectSignBtn.textContent = 'Connect + Sign';
+      }
+    });
+
+    connectSignAddKeyBtn.addEventListener('click', async () => {
+      try {
+        connectSignAddKeyBtn.textContent = 'Connecting...';
+
+        const nonceBytes = new Uint8Array(32);
+        crypto.getRandomValues(nonceBytes);
+        const fcKeyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign"]);
+        const fcPublicKeyRaw = await crypto.subtle.exportKey("raw", fcKeyPair.publicKey);
+        const fcPublicKeyBytes = new Uint8Array(fcPublicKeyRaw);
+        const fcPublicKey = 'ed25519:' + base58Encode(fcPublicKeyBytes);
+
+        const result = await connector.requestConnection({
+          functionCallKey: {
+            publicKey: fcPublicKey,
+            contractId: 'intear.near',
+            methodNames: ['test_method']
+          },
+          walletUrl: "https://wallet.intear.tech",
+        });
+        console.log('result:', result);
+        connectSignAddKeyBtn.textContent = 'Connect + Add Key';
+
+        if (result === null) {
+          setStatus('Connection rejected by user', 'rejected');
+        } else {
+          updateUI();
+          if (result.signedMessage) {
+            sigAccountId.textContent = result.signedMessage.accountId;
+            sigPublicKey.textContent = result.signedMessage.publicKey;
+            sigSignature.textContent = result.signedMessage.signature;
+            signatureResult.classList.add('visible');
+          }
+          setStatus(`Connected + FC key added for intear.near`, 'connected');
+        }
+      } catch (error) {
+        console.error('Connection failed:', error);
+        setStatus(`Error: ${error.message}`, 'error');
+        connectSignAddKeyBtn.textContent = 'Sign in + Add Key';
       }
     });
 
@@ -419,7 +474,8 @@
       try {
         connectIframeBtn.textContent = 'Connecting...';
         const result = await connector.requestConnection({
-          walletUrl: iframe("https://staging.wallet.intear.tech")
+          walletUrl: iframe("https://wallet.intear.tech")
+          // walletUrl: iframe("http://127.0.0.1:3000") // used for local development of wallet
         });
         console.log('result:', result);
         connectIframeBtn.textContent = 'Connect via Iframe';

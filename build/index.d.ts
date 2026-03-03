@@ -6,11 +6,35 @@ export declare const INTEAR_NATIVE_WALLET_URL: "intear://";
 /**
  * Use a selector iframe to let the user choose which way to connect. This is the
  * preferred way for most dapps, since the user can be using staging or native app,
- * so you don't have to implement the selector yourself.
+ * so you don"t have to implement the selector yourself.
  * @param walletUrl - Origin of the iframe (where the iframe .html is loaded from).
  * @returns The valid walletUrl parameter that you can use in requestConnection call.
  */
 export declare function iframe(walletUrl?: string): string;
+/**
+ * Decodes a base64url string to byte array
+ * @param str - The base64 or base64url encoded string
+ * @returns The decoded byte array
+ */
+export declare function base64Decode(str: string): Uint8Array;
+/**
+ * Encodes a byte array to base64 string
+ * @param bytes - The byte array to encode
+ * @returns The base64 encoded string
+ */
+export declare function base64Encode(bytes: Uint8Array): string;
+/**
+ * Encodes a byte array to base58 string
+ * @param bytes - The byte array to encode
+ * @returns The base58 encoded string
+ */
+export declare function base58Encode(bytes: Uint8Array | Iterable<number>): string;
+/**
+ * Decodes a base58 string to byte array
+ * @param str - The base58 encoded string
+ * @returns The decoded byte array
+ */
+export declare function base58Decode(str: string): Uint8Array;
 /**
  * Storage - A storage interface that is used by the connector to store its internal data
  */
@@ -102,18 +126,18 @@ export interface SendTransactionsResult {
  */
 export interface ConnectionOptions {
     /**
-     * The network ID to connect to (defaults to 'mainnet')
+     * The network ID to connect to (defaults to "mainnet")
      */
     networkId?: string;
     /**
-     * The URL of the wallet to connect to (defaults to 'https://wallet.intear.tech').
-     * Use INTEAR_NATIVE_WALLET_URL ('intear://') to connect via the native desktop/mobile app.
+     * The URL of the wallet to connect to (defaults to "https://wallet.intear.tech").
+     * Use INTEAR_NATIVE_WALLET_URL ("intear://") to connect via the native desktop/mobile app.
      */
     walletUrl?: typeof INTEAR_NATIVE_WALLET_URL | string;
     /**
      * The logout bridge WebSocket URL for native app communication.
      * Only used when walletUrl is INTEAR_NATIVE_WALLET_URL.
-     * Defaults to 'wss://logout-bridge-service.intear.tech'.
+     * Defaults to "wss://logout-bridge-service.intear.tech".
      */
     logoutBridgeUrl?: string;
     /**
@@ -126,6 +150,14 @@ export interface ConnectionOptions {
      * https://rainy.intea.rs
      */
     relayerId?: string;
+    /**
+     * Request adding a function call key when connecting to the account.
+     */
+    functionCallKey?: {
+        publicKey: string;
+        contractId: string;
+        methodNames: [string, ...string[]] | "any";
+    };
 }
 /**
  * Result of a successful connection to the Intear Wallet
@@ -148,7 +180,7 @@ declare class ConnectedAccount {
     accountId: string;
     disconnected: boolean;
     /**
-     * @deprecated Don't use this constructor directly, this class should only be instantiated by the connector
+     * @deprecated Don"t use this constructor directly, this class should only be instantiated by the connector
      */
     constructor(accountId: string, connector: IntearWalletConnector);
     /**
@@ -406,6 +438,7 @@ export type NonDelegateAction = Exclude<NearAction, {
 export interface SignedDelegateAction {
     delegate_action: DelegateAction;
     signature: string;
+    borshSerializedBase64: string;
 }
 export interface DelegateAction {
     sender_id: string;
