@@ -212,7 +212,6 @@ async function openPopupFlow<TResponse>(config: WalletFlowConfig<TResponse>): Pr
         };
 
         const messageHandler = async (event: MessageEvent) => {
-            console.log(__NEARCONNECT__, event.origin, config.walletUrl);
             if (!__NEARCONNECT__ && event.origin !== config.walletUrl) {
                 return;
             }

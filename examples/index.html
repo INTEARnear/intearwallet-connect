@@ -630,6 +630,18 @@
                 }
               }
             ]
+          },
+          {
+            signerId: accountId,
+            receiverId: 'intear.near',
+            actions: [
+              {
+                type: 'Transfer',
+                params: {
+                  deposit: '2' + '0'.repeat(24 - 2) // 0.02 NEAR
+                }
+              }
+            ]
           }
         ], true);
 
