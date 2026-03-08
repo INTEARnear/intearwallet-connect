@@ -134,7 +134,6 @@ async function openPopupFlow(config) {
             }
         };
         const messageHandler = async (event) => {
-            console.log(false, event.origin, config.walletUrl);
             if (event.origin !== config.walletUrl) {
                 return;
             }
@@ -556,10 +555,9 @@ class IntearWalletConnector {
                 const listener = async (event) => {
                     switch (event.data.type) {
                         case "ready":
-                            const data = signInData;
                             iframe.contentWindow?.postMessage({
                                 type: "signIn",
-                                data,
+                                data: signInData,
                             }, "*");
                             break;
                         case "connected":

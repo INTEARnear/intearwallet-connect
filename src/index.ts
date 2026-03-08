@@ -940,20 +940,9 @@ export class IntearWalletConnector {
 
                     switch (event.data.type) {
                         case "ready":
-                            const data = __NEARCONNECT__
-                                ? {
-                                    publicKey,
-                                    networkId,
-                                    nonce,
-                                    message,
-                                    signature,
-                                    version: "V3",
-                                    relayerId,
-                                }
-                                : signInData;
                             iframe.contentWindow?.postMessage({
                                 type: "signIn",
-                                data,
+                                data: signInData,
                             }, "*");
                             break;
                         case "connected":
