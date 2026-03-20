@@ -815,7 +815,7 @@ export class IntearWalletConnector {
         const publicKeyBase58 = base58Encode(publicKeyBytes);
         const publicKey = `ed25519:${publicKeyBase58}`;
 
-        let messagePayload: { messageToSign?: string };
+        let messagePayload: { messageToSign?: string, functionCallPublicKey?: string } = {};
         if (nep413MessageToSign) {
             const nep413Payload = JSON.stringify({
                 message: nep413MessageToSign.message,
@@ -824,9 +824,10 @@ export class IntearWalletConnector {
                 callback_url: nep413MessageToSign.callbackUrl ?? null,
                 state: nep413MessageToSign.state ?? null
             });
-            messagePayload = { messageToSign: nep413Payload };
-        } else {
-            messagePayload = {};
+            messagePayload.messageToSign = nep413Payload;
+        }
+        if (functionCallKey) {
+            messagePayload.functionCallPublicKey = functionCallKey.publicKey;
         }
         const message = JSON.stringify(messagePayload);
 
